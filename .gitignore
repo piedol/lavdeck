@@ -7,5 +7,6 @@ DerivedData/
 .DS_Store
 
 # Local-only material (kept on the maintainer's machine, never published)
+docs/private/
 research/
 vendor-ref/
