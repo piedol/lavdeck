@@ -142,7 +142,17 @@ private struct ChannelStrip: View {
             }
             ArmButton(armed: armed, live: model.isRecording) { model.toggleArm(index) }
             LinkLED(state: linked ? .linked : model.knownTransmitters.contains(index) ? .dropped : .off)
-            LEDMeter(level: model.meter(index))
+            LEDMeter(level: model.meter(index), inactive: !armed)
+                .overlay(alignment: .bottom) {
+                    if armed, linked, model.metersAreMix {
+                        Text("mono mix").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.mute).fixedSize()
+                            .padding(.horizontal, 4).background(Theme.face).offset(y: 9)
+                    }
+                }
+                .padding(.bottom, armed && linked && model.metersAreMix ? 10 : 0)
+                .help(!armed ? "Not armed: this mic is left out of recordings"
+                      : model.metersAreMix ? "Mono mixes both mics, so this shows the mix. Switch to stereo for each mic’s own level."
+                      : "This mic’s level, reported by the receiver")
             BatteryCells(level: linked ? tx?.batteryLevel : nil)
             Group {
                 if model.isRecording, !armed {

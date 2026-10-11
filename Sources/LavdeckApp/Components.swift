@@ -49,6 +49,8 @@ struct LinkLED: View {
 /// Vertical 12-segment LED ladder with a short peak hold.
 struct LEDMeter: View {
     let level: Double
+    /// Mic left out of the take: segments dark and the well dimmed.
+    var inactive = false
     private let segments = 12
     @State private var peak = 0.0
     @State private var peakTime = Date.distantPast
@@ -67,13 +69,14 @@ struct LEDMeter: View {
         .padding(4)
         .background(RoundedRectangle(cornerRadius: 5).fill(Theme.well)
             .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.hairline, lineWidth: 0.5)))
+        .opacity(inactive ? 0.5 : 1)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: lit)
         .onChange(of: level) { _, new in
             if new >= peak || Date().timeIntervalSince(peakTime) > 1.2 { peak = new; peakTime = Date() }
         }
         .accessibilityElement()
         .accessibilityLabel("Level")
-        .accessibilityValue("\(Int(level * 100)) percent")
+        .accessibilityValue(inactive ? "not armed" : "\(Int(level * 100)) percent")
     }
 
     private func color(for index: Int) -> Color {

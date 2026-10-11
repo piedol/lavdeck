@@ -135,17 +135,22 @@ final class AppModel {
     var displayedChannel: ChannelMode? { pendingChannel ?? receiver.channelMode }
     var displayedGain: Int? { pendingGain ?? receiver.gainDB }
 
-    /// 0...1 meter fill for a transmitter. While recording this is real per-channel audio
-    /// (L = TX1, R = TX2 in stereo); otherwise it is the receiver's own meter value.
+    /// In mono the receiver mixes both mics, so it (and the audio) can only report the mix.
+    var metersAreMix: Bool { receiver.channelMode != .stereo }
+
+    /// 0...1 meter fill for a transmitter. A disarmed mic reads 0 (it is not in the take).
+    /// While recording this is real per-channel audio (L = TX1, R = TX2 in stereo); otherwise it is
+    /// the receiver's own meter, which is per mic in stereo and the mix in mono.
     func meter(_ index: Int) -> Double {
+        guard armed.contains(index), isLinked(index) else { return 0 }
         if isRecording, recordingLevels.count == 2 {
             let channel = receiver.channelMode == .stereo ? index - 1 : 0
             let db = Double(recordingLevels[min(max(channel, 0), 1)])
             return max(0, min(1, (db + 60) / 60))
         }
-        guard isLinked(index), let raw = transmitter(index)?.meterLevel else { return 0 }
-        // Receiver meter units are not documented; ~20 is a quiet room, ~80 loud speech.
-        return max(0, min(1, Double(raw) / 100))
+        guard let raw = transmitter(index)?.meterLevel else { return 0 }
+        // Receiver meter units: ~30 in a quiet room, ~45 at rest with noise, ~75 for loud speech/tone.
+        return max(0, min(1, (Double(raw) - 25) / 60))
     }
 
     func dBFS(_ index: Int) -> Int? {
