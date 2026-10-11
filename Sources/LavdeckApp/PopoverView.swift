@@ -1,0 +1,212 @@
+import LavdeckKit
+import SwiftUI
+
+/// The menu bar popover: two channel strips and a master section on a console deck.
+struct PopoverView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            if model.isConnected {
+                HStack(alignment: .top, spacing: 6) {
+                    ChannelStrip(index: 1)
+                    ChannelStrip(index: 2)
+                    MasterSection()
+                }
+                footer
+                notes
+            } else {
+                absent
+            }
+        }
+        .padding(10)
+        .frame(width: 372)
+        .background(Theme.deck)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.16), value: model.isRecording)
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("Wireless Mic Rx").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.ink)
+            Spacer()
+            if model.isRecording {
+                HStack(spacing: 5) {
+                    Circle().fill(Theme.rec).frame(width: 8, height: 8)
+                    Text("REC").font(Theme.caps).foregroundStyle(Theme.recText)
+                }
+            } else if model.isConnected {
+                Text("Mobile RX · \(model.receiver.identity.firmware ?? "…")").font(Theme.label).monospacedDigit()
+                    .foregroundStyle(Theme.mute)
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private var footer: some View {
+        HStack {
+            HStack(spacing: 5) {
+                Image(systemName: "lock").font(.system(size: 10, weight: .semibold))
+                Text("Noise cancel").foregroundStyle(Theme.mute)
+                Text(model.receiver.noiseCancelling == true ? "On" : model.receiver.noiseCancelling == false ? "Off" : "…")
+                    .fontWeight(.semibold).foregroundStyle(Theme.ink)
+            }
+            .help("Set with the O/L/H switch on the receiver")
+            Spacer()
+            Button { model.revealRecordings() } label: {
+                HStack(spacing: 4) {
+                    Text(model.format == .wav ? "WAV 24-bit" : "M4A").fontWeight(.semibold).foregroundStyle(Theme.ink)
+                    if model.splitTracks { Text("· split tracks").foregroundStyle(Theme.mute) }
+                    Image(systemName: "folder").font(.system(size: 11)).foregroundStyle(Theme.mute)
+                }
+            }
+            .buttonStyle(.plain)
+            .help("Show recordings in Finder")
+            SettingsLink { Image(systemName: "gearshape").foregroundStyle(Theme.mute) }
+                .buttonStyle(.plain)
+                .help("Settings")
+        }
+        .font(Theme.label)
+        .foregroundStyle(Theme.mute)
+        .padding(.horizontal, 4)
+    }
+
+    @ViewBuilder private var notes: some View {
+        if let error = model.lastError {
+            Note(text: error, symbol: "exclamationmark.triangle.fill")
+        }
+        ForEach(model.droppedTransmitters, id: \.self) { index in
+            Note(text: "TX\(index) disconnected from the receiver. It reconnects on its own when back in range or powered on.",
+                 symbol: "antenna.radiowaves.left.and.right.slash")
+        }
+        ForEach(model.lowBattery, id: \.self) { index in
+            Note(text: "TX\(index) battery looks low (receiver estimate). Charge it soon.", symbol: "battery.25percent")
+        }
+        if model.soloMic != nil, !model.isRecording, model.receiver.channelMode != .stereo {
+            Note(text: "Only TX\(model.soloMic!) is armed. Recording will switch the receiver to stereo so that mic records alone.",
+                 symbol: "info.circle.fill")
+        }
+        ForEach(model.outdatedFirmware, id: \.index) { item in
+            Note(text: "TX\(item.index) firmware \(item.firmware) is behind TX\(item.newestIndex) (\(item.newest)). Update it in DJI Mimo.",
+                 symbol: "arrow.down.circle.fill")
+        }
+    }
+
+    private var absent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Receiver not connected").font(Theme.labelBold).foregroundStyle(Theme.ink)
+            Text("Plug the DJI Mic receiver into this Mac. A hub needs to carry USB data, not just power.")
+                .font(Theme.label).foregroundStyle(Theme.mute).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 9).fill(Theme.face))
+    }
+}
+
+private struct Note: View {
+    let text: String
+    let symbol: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: symbol).font(.system(size: 11))
+            Text(text).fixedSize(horizontal: false, vertical: true)
+        }
+        .font(Theme.label)
+        .foregroundStyle(Theme.warnText)
+        .padding(.horizontal, 9).padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 7).fill(Theme.warnFill))
+    }
+}
+
+private struct ChannelStrip: View {
+    @Environment(AppModel.self) private var model
+    let index: Int
+
+    var body: some View {
+        let tx = model.transmitter(index)
+        let linked = model.isLinked(index)
+                let outdated = model.outdatedFirmware.contains { $0.index == index }
+        let armed = model.armed.contains(index)
+        VStack(spacing: 8) {
+            if model.isRecording, let file = model.destination(for: index) {
+                NamePlate(title: model.recordingMode == .stereo ? "TX\(index) · \(index == 1 ? "L" : "R")" : "TX\(index)",
+                          subtitle: "→ \(file)", armed: true, dimmed: !linked)
+            } else if model.isRecording {
+                NamePlate(title: "TX\(index)", subtitle: "off", hollow: true)
+            } else {
+                NamePlate(title: "TX\(index)", subtitle: tx?.identity.bluetoothID ?? "—", dimmed: !linked)
+            }
+            ArmButton(armed: armed, live: model.isRecording) { model.toggleArm(index) }
+            LinkLED(state: linked ? .linked : model.knownTransmitters.contains(index) ? .dropped : .off)
+            LEDMeter(level: model.meter(index))
+            BatteryCells(level: linked ? tx?.batteryLevel : nil)
+            Group {
+                if model.isRecording, !armed {
+                    Text("not rec")
+                } else if let db = model.dBFS(index) {
+                    Text("\(db) dBFS")
+                } else if let fw = tx?.identity.firmware {
+                    Text(fw.split(separator: ".").prefix(3).joined(separator: "."))
+                        .padding(.horizontal, outdated ? 5 : 0).padding(.vertical, outdated ? 2 : 0)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(outdated ? Theme.warnFill : .clear))
+                        .foregroundStyle(outdated ? Theme.warnText : Theme.mute)
+                        .help("Firmware \(fw)")
+                } else {
+                    Text(linked ? "…" : "not linked")
+                }
+            }
+            .font(Theme.mono)
+            .foregroundStyle(Theme.mute)
+            .lineLimit(1)
+            .fixedSize()
+        }
+        .padding(8)
+        .frame(width: 100)
+        .background(RoundedRectangle(cornerRadius: 9).fill(Theme.face)
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.hairline, lineWidth: 0.5)))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Transmitter \(index)")
+    }
+}
+
+private struct MasterSection: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if model.isRecording, let started = model.recordingStarted {
+                TimelineView(.periodic(from: started, by: 1)) { context in
+                    let elapsed = Int(context.date.timeIntervalSince(started))
+                    VStack(spacing: 1) {
+                        Text(String(format: "%02d:%02d:%02d", elapsed / 3600, elapsed / 60 % 60, elapsed % 60))
+                            .font(.system(size: 20, weight: .semibold)).monospacedDigit().foregroundStyle(Theme.ink)
+                        Text("started \(started.formatted(date: .omitted, time: .shortened))").font(Theme.label).foregroundStyle(Theme.mute)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            } else {
+                Text("GAIN").capsLabel()
+            }
+            GainFader(steps: [-12, -6, 0, 6, 12], value: model.displayedGain, pending: model.pendingGain != nil,
+                      onSet: model.setGain, height: model.isRecording ? 84 : 132)
+            ModeSwitch(mode: display(model.displayedChannel), disabled: model.isRecording || model.pendingChannel != nil) { stereo in
+                model.setChannel(stereo ? .stereo : .mono)
+            }
+            .help(model.isRecording ? "Stop recording to change the channel mode" : "Mono mixes both mics; stereo puts TX1 left and TX2 right")
+            RecordButton(recording: model.isRecording, disabled: !model.isRecording && model.armed.isEmpty,
+                         action: model.toggleRecording)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 9).fill(Theme.face)
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.hairline, lineWidth: 0.5)))
+    }
+
+    private func display(_ mode: ChannelMode?) -> ChannelModeDisplay {
+        switch mode { case .mono: .mono; case .stereo: .stereo; default: .unknown }
+    }
+}
