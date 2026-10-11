@@ -1,0 +1,13 @@
+# Build output
+.build/
+.swiftpm/
+build/
+DerivedData/
+*.xcuserstate
+.DS_Store
+
+# Local-only material (kept on the maintainer's machine, never published)
+research/
+vendor-ref/
+.impeccable/
+PRODUCT.md
