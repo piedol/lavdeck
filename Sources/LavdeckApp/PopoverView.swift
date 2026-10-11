@@ -9,6 +9,7 @@ struct PopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+            if model.identifying { IdentifyBanner() }
             if model.isConnected {
                 HStack(alignment: .top, spacing: 6) {
                     ChannelStrip(index: 1)
@@ -36,9 +37,19 @@ struct PopoverView: View {
                     Circle().fill(Theme.rec).frame(width: 8, height: 8)
                     Text("REC").font(Theme.caps).foregroundStyle(Theme.recText)
                 }
-            } else if model.isConnected {
-                Text("Mobile RX · \(model.receiver.identity.firmware ?? "…")").font(Theme.label).monospacedDigit()
-                    .foregroundStyle(Theme.mute)
+            } else if model.isConnected && !model.identifying {
+                Button { model.startIdentify() } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "waveform").font(.system(size: 11, weight: .semibold))
+                        Text("Which mic is which?").font(Theme.labelBold)
+                    }
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(Capsule().fill(Theme.face))
+                    .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+                .help("Talk into a mic to see which strip it is. Receiver: Mobile RX, firmware \(model.receiver.identity.firmware ?? "unknown")")
             }
         }
         .padding(.horizontal, 4)
@@ -105,6 +116,33 @@ struct PopoverView: View {
     }
 }
 
+private struct IdentifyBanner: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: "waveform").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.green)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(model.talkingMic.map { "That’s \(model.displayName($0)) (TX\($0))." } ?? "Talk into one mic. Its strip lights up.")
+                    .font(Theme.labelBold).foregroundStyle(Theme.ink)
+                Text("Click a strip’s name to label it, e.g. “Host”. The receiver is in stereo while this is open; your setting comes back when you’re done.")
+                    .font(Theme.label).foregroundStyle(Theme.mute).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Button("Done") { model.stopIdentify() }
+                .buttonStyle(.plain)
+                .font(Theme.labelBold).foregroundStyle(Theme.onInk)
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .background(Capsule().fill(Theme.ink))
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 9).fill(Theme.face)
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.green.opacity(0.6), lineWidth: 1)))
+        .animation(.easeOut(duration: 0.16), value: model.talkingMic)
+    }
+}
+
 private struct Note: View {
     let text: String
     let symbol: String
@@ -125,31 +163,60 @@ private struct Note: View {
 private struct ChannelStrip: View {
     @Environment(AppModel.self) private var model
     let index: Int
+    @State private var editing = false
+    @State private var draft = ""
+    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         let tx = model.transmitter(index)
         let linked = model.isLinked(index)
                 let outdated = model.outdatedFirmware.contains { $0.index == index }
         let armed = model.armed.contains(index)
+        let name = model.displayName(index)
+        let named = name != "TX\(index)"
+        let talking = model.identifying && model.talkingMic == index
         VStack(spacing: 8) {
             if model.isRecording, let file = model.destination(for: index) {
-                NamePlate(title: model.recordingMode == .stereo ? "TX\(index) · \(index == 1 ? "L" : "R")" : "TX\(index)",
+                NamePlate(title: model.recordingMode == .stereo ? "\(name) · \(index == 1 ? "L" : "R")" : name,
                           subtitle: "→ \(file)", armed: true, dimmed: !linked)
             } else if model.isRecording {
-                NamePlate(title: "TX\(index)", subtitle: "off", hollow: true)
+                NamePlate(title: name, subtitle: "off", hollow: true)
+            } else if editing {
+                TextField("TX\(index)", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(Theme.labelBold)
+                    .foregroundStyle(Theme.plateText)
+                    .focused($fieldFocused)
+                    .onSubmit { commit() }
+                    .onExitCommand { editing = false }
+                    .padding(.horizontal, 7).padding(.vertical, 12)
+                    .background(RoundedRectangle(cornerRadius: 5).fill(Theme.plate))
+                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.green, lineWidth: 1.5))
+                    .onAppear { fieldFocused = true }
+                    .onChange(of: fieldFocused) { _, focused in if !focused { commit() } }
             } else {
-                NamePlate(title: "TX\(index)", subtitle: tx?.identity.bluetoothID ?? "—", dimmed: !linked)
+                Button {
+                    draft = named ? name : ""
+                    editing = true
+                } label: {
+                    NamePlate(title: name,
+                              subtitle: talking ? "talking" : named ? "TX\(index)" : (tx?.identity.bluetoothID ?? "—"),
+                              dimmed: !linked)
+                }
+                .buttonStyle(.plain)
+                .help("Click to name this mic (the name follows this physical mic)")
+                .disabled(tx?.identity.bluetoothID == nil)
             }
             ArmButton(armed: armed, live: model.isRecording) { model.toggleArm(index) }
             LinkLED(state: linked ? .linked : model.knownTransmitters.contains(index) ? .dropped : .off)
-            LEDMeter(level: model.meter(index), inactive: !armed)
+            LEDMeter(level: model.meter(index), inactive: !armed && !model.identifying)
                 .overlay(alignment: .bottom) {
-                    if armed, linked, model.metersAreMix {
+                    if armed, linked, model.metersAreMix, !model.identifying {
                         Text("mono mix").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.mute).fixedSize()
                             .padding(.horizontal, 4).background(Theme.face).offset(y: 9)
                     }
                 }
-                .padding(.bottom, armed && linked && model.metersAreMix ? 10 : 0)
+                .padding(.bottom, armed && linked && model.metersAreMix && !model.identifying ? 10 : 0)
                 .help(!armed ? "Not armed: this mic is left out of recordings"
                       : model.metersAreMix ? "Mono mixes both mics, so this shows the mix. Switch to stereo for each mic’s own level."
                       : "This mic’s level, reported by the receiver")
@@ -176,10 +243,17 @@ private struct ChannelStrip: View {
         }
         .padding(8)
         .frame(width: 100)
-        .background(RoundedRectangle(cornerRadius: 9).fill(Theme.face)
-            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.hairline, lineWidth: 0.5)))
+        .background(RoundedRectangle(cornerRadius: 9).fill(talking ? Theme.green.opacity(0.12) : Theme.face)
+            .overlay(RoundedRectangle(cornerRadius: 9)
+                .strokeBorder(talking ? Theme.green : Theme.hairline, lineWidth: talking ? 2 : 0.5)))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Transmitter \(index)")
+        .accessibilityLabel("\(name), transmitter \(index)\(talking ? ", talking" : "")")
+    }
+
+    private func commit() {
+        guard editing else { return }
+        model.rename(index, to: draft)
+        editing = false
     }
 }
 

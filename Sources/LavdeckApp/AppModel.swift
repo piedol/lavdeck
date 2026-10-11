@@ -37,6 +37,15 @@ final class AppModel {
     var tapToRecord: Bool { didSet { defaults.set(tapToRecord, forKey: "tapToRecord"); restartButtons() } }
     /// Transmitters that record. One armed mic records alone (needs stereo); none disables Record.
     var armed: Set<Int> { didSet { defaults.set(Array(armed), forKey: "armed") } }
+    /// User names for physical mics, keyed by Bluetooth ID so a name follows the mic, not the slot.
+    var micNames: [String: String] { didSet { defaults.set(micNames, forKey: "micNames") } }
+
+    // Identify mode: temporarily stereo so each mic's own level shows which one is being spoken into.
+    private(set) var identifying = false
+    private(set) var talkingMic: Int?
+    private var detector = TalkingDetector()
+    private var identifyRestore: ChannelMode?
+    private var identifyTimeout: Task<Void, Never>?
     var launchAtLogin: Bool {
         get { SMAppService.mainApp.status == .enabled }
         set {
@@ -63,6 +72,7 @@ final class AppModel {
         splitTracks = defaults.object(forKey: "splitTracks") as? Bool ?? true
         tapToRecord = defaults.object(forKey: "tapToRecord") as? Bool ?? true
         armed = Set(defaults.array(forKey: "armed") as? [Int] ?? [1, 2])
+        micNames = defaults.dictionary(forKey: "micNames") as? [String: String] ?? [:]
 
         controller.onStatus = { [weak self] status in
             Task { @MainActor in self?.apply(status) }
@@ -142,7 +152,7 @@ final class AppModel {
     /// While recording this is real per-channel audio (L = TX1, R = TX2 in stereo); otherwise it is
     /// the receiver's own meter, which is per mic in stereo and the mix in mono.
     func meter(_ index: Int) -> Double {
-        guard armed.contains(index), isLinked(index) else { return 0 }
+        guard identifying || armed.contains(index), isLinked(index) else { return 0 }
         if isRecording, recordingLevels.count == 2 {
             let channel = receiver.channelMode == .stereo ? index - 1 : 0
             let db = Double(recordingLevels[min(max(channel, 0), 1)])
@@ -192,6 +202,7 @@ final class AppModel {
         lastError = nil
         Task { [weak self] in
             guard let self else { return }
+            if identifying { await endIdentify() }
             if soloMic != nil, receiver.channelMode != .stereo {
                 // One mic alone needs the receiver in stereo (TX1 left, TX2 right); mono mixes both.
                 do { try await controller.setChannel(.stereo) } catch {
@@ -314,9 +325,64 @@ final class AppModel {
         }
     }
 
+    // MARK: Identify and naming
+
+    /// The name shown on a strip: the user's name for that physical mic, else the slot.
+    func displayName(_ index: Int) -> String {
+        if let id = transmitter(index)?.identity.bluetoothID, let name = micNames[id], !name.isEmpty { return name }
+        return "TX\(index)"
+    }
+
+    func rename(_ index: Int, to name: String) {
+        guard let id = transmitter(index)?.identity.bluetoothID else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        micNames[id] = trimmed.isEmpty || trimmed == "TX\(index)" ? nil : String(trimmed.prefix(14))
+    }
+
+    func startIdentify() {
+        guard !isRecording, !identifying, isConnected else { return }
+        identifying = true
+        detector.reset()
+        talkingMic = nil
+        if receiver.channelMode != .stereo {
+            identifyRestore = receiver.channelMode
+            setChannel(.stereo)
+        }
+        identifyTimeout?.cancel()
+        identifyTimeout = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(45))
+            guard !Task.isCancelled else { return }
+            self?.stopIdentify()
+        }
+    }
+
+    func stopIdentify() {
+        guard identifying else { return }
+        Task { await endIdentify() }
+    }
+
+    /// Leaves identify mode and, once any in-flight switch has settled, restores the previous mode.
+    func endIdentify() async {
+        guard identifying else { return }
+        identifying = false
+        talkingMic = nil
+        identifyTimeout?.cancel()
+        identifyTimeout = nil
+        guard let restore = identifyRestore else { return }
+        identifyRestore = nil
+        for _ in 0..<40 where pendingChannel != nil { try? await Task.sleep(for: .milliseconds(100)) }
+        guard receiver.channelMode != restore else { return }
+        pendingChannel = restore
+        do { try await controller.setChannel(restore) } catch { lastError = "Couldn’t switch back to \(restore): \(error)" }
+        pendingChannel = nil
+    }
+
     private func apply(_ new: MicStatus) {
         guard !demo else { return }
         status = new
+        if identifying, new.receiver.channelMode == .stereo {
+            talkingMic = detector.update(tx1: new.transmitters[1]?.meterLevel, tx2: new.transmitters[2]?.meterLevel)
+        }
         knownTransmitters.formUnion(new.receiver.connectedTransmitters)
         if !isConnected, new.receiver.channelMode != nil { isConnected = true }
         if new.receiver.channelMode == nil, new.lastPush == nil { isConnected = false }

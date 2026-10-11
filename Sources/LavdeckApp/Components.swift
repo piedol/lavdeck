@@ -57,8 +57,8 @@ struct LEDMeter: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let lit = Int((level * Double(segments)).rounded(.down))
-        let peakIndex = Int((peak * Double(segments)).rounded(.down)) - 1
+        let lit = inactive ? 0 : Int((level * Double(segments)).rounded(.down))
+        let peakIndex = inactive ? -1 : Int((peak * Double(segments)).rounded(.down)) - 1
         VStack(spacing: 2) {
             ForEach((0..<segments).reversed(), id: \.self) { i in
                 RoundedRectangle(cornerRadius: 1.5)
@@ -74,6 +74,7 @@ struct LEDMeter: View {
         .onChange(of: level) { _, new in
             if new >= peak || Date().timeIntervalSince(peakTime) > 1.2 { peak = new; peakTime = Date() }
         }
+        .onChange(of: inactive) { _, now in if now { peak = 0 } }
         .accessibilityElement()
         .accessibilityLabel("Level")
         .accessibilityValue(inactive ? "not armed" : "\(Int(level * 100)) percent")
@@ -229,7 +230,9 @@ struct ArmButton: View {
         }
         .buttonStyle(.plain)
         .allowsHitTesting(!locked)
-        .help(locked ? "Stop recording to change which mics record" : armed ? "Recording this mic. Click to leave it out." : "Not recording this mic. Click to include it.")
+        .help(locked ? "Stop recording to change which mics record"
+              : armed ? "This mic will be recorded. Click to leave it out of Lavdeck’s recordings."
+              : "Left out of Lavdeck’s recordings. The receiver still sends this mic to other apps; click to include it.")
         .accessibilityLabel("Record this mic")
         .accessibilityValue(armed ? "on" : "off")
     }
