@@ -1,5 +1,6 @@
 import AppKit
 import LavdeckKit
+import LavdeckPluginKit
 import Foundation
 import Observation
 import ServiceManagement
@@ -55,6 +56,7 @@ final class AppModel {
     }
 
     private let defaults = UserDefaults.standard
+    let plugins = PluginHost()
     private let controller = MicController()
     private let recorder = MicRecorder()
     private var buttons: ButtonMonitor?
@@ -144,6 +146,18 @@ final class AppModel {
 
     var displayedChannel: ChannelMode? { pendingChannel ?? receiver.channelMode }
     var displayedGain: Int? { pendingGain ?? receiver.gainDB }
+
+    /// The receiver's physical O / L / H noise-cancelling switch: off, or on at level 0 (Low) / 1 (High).
+    var noiseCancelLabel: String {
+        guard let on = receiver.noiseCancelling else { return "…" }
+        guard on else { return "Off" }
+        switch receiver.noiseCancellingLevel {
+        case 0?: return "Low"
+        case 1?: return "High"
+        case let level?: return "On (\(level))"
+        case nil: return "On"
+        }
+    }
 
     /// In mono the receiver mixes both mics, so it (and the audio) can only report the mix.
     var metersAreMix: Bool { receiver.channelMode != .stereo }
@@ -254,29 +268,58 @@ final class AppModel {
     private func recordingFinished(_ url: URL, error: Error?) {
         levelTimer?.invalidate()
         levelTimer = nil
+        let started = recordingStarted
         isRecording = false
         recordingLevels = []
         recordingStarted = nil
         lastSavedFolder = currentStem?.deletingLastPathComponent() ?? url.deletingLastPathComponent()
-        if let error {
-            lastError = "Recording stopped with an error: \(error.localizedDescription)"
-        } else if let solo = recordingSolo, let stem = currentStem {
-            let out = URL(fileURLWithPath: stem.path + " TX\(solo).\(format.rawValue)")
-            Task.detached {
-                do { try TrackSplitter.extract(url, channel: solo - 1, to: out) }
-                catch { await MainActor.run { self.lastError = "Couldn’t save TX\(solo)’s track: \(error)" } }
-                try? FileManager.default.removeItem(at: url)  // the scratch stereo take
-            }
-        } else if splitTracks, recordingMode == .stereo, format == .wav, let stem = currentStem {
-            let left = URL(fileURLWithPath: stem.path + " TX1.wav"), right = URL(fileURLWithPath: stem.path + " TX2.wav")
-            Task.detached {
-                do { try TrackSplitter.split(url, left: left, right: right) }
-                catch { await MainActor.run { self.lastError = "Couldn’t split tracks: \(error)" } }
-            }
-        }
+        let stem = currentStem, solo = recordingSolo, mode = recordingMode, fmt = format, split = splitTracks
         currentStem = nil
         recordingSolo = nil
+        if let error {
+            lastError = "Recording stopped with an error: \(error.localizedDescription)"
+            return
+        }
+        guard let stem else { return }
+        // Snapshot who was on which mic now; names can change later.
+        let mics = [1, 2].map { index in
+            TakeMetadata.Mic(index: index, name: displayName(index), bluetoothID: transmitter(index)?.identity.bluetoothID,
+                             armed: armed.contains(index))
+        }
+        Task { [weak self] in
+            // Post-process off the main thread: keep one mic's channel, or split stereo into tracks.
+            let failure: String? = await Task.detached { () -> String? in
+                if let solo {
+                    let out = URL(fileURLWithPath: stem.path + " TX\(solo).\(fmt.rawValue)")
+                    defer { try? FileManager.default.removeItem(at: url) }  // the scratch stereo take
+                    do { try TrackSplitter.extract(url, channel: solo - 1, to: out) } catch { return "Couldn’t save TX\(solo)’s track: \(error)" }
+                } else if split, mode == .stereo, fmt == .wav {
+                    let left = URL(fileURLWithPath: stem.path + " TX1.wav"), right = URL(fileURLWithPath: stem.path + " TX2.wav")
+                    do { try TrackSplitter.split(url, left: left, right: right) } catch { return "Couldn’t split tracks: \(error)" }
+                }
+                return nil
+            }.value
+            guard let self else { return }
+            if let failure { lastError = failure }
+            let folder = stem.deletingLastPathComponent()
+            let stemName = stem.lastPathComponent
+            let metadata = TakeMetadata(started: started ?? Date(), duration: started.map { Date().timeIntervalSince($0) },
+                                        channelMode: mode.map { "\($0)" }, format: fmt.rawValue,
+                                        mics: mics.map { var m = $0; if solo != nil { m.armed = m.index == solo }; return m })
+            try? metadata.write(to: folder.appendingPathComponent("\(stemName).take.json"))
+            if let take = TakeLibrary.take(folder: folder, stem: stemName, micNames: micNames) {
+                plugins.takeFinished(take)
+            }
+            libraryRevision += 1
+        }
     }
+
+    /// Bumped when a take is written or deleted, so the recordings manager refreshes.
+    private(set) var libraryRevision = 0
+    func noteLibraryChanged() { libraryRevision += 1 }
+
+    /// All takes in the recordings folder, newest first.
+    func scanTakes() -> [Take] { TakeLibrary.scan(root: recordingsRoot, micNames: micNames) }
 
     func revealRecordings() {
         let folder = lastSavedFolder ?? recordingsRoot

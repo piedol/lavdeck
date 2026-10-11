@@ -1,0 +1,17 @@
+{
+  "id": "io.github.piedol.lavdeck.example.take-info",
+  "name": "Take Info (example)",
+  "version": "1.0.0",
+  "protocol": 1,
+  "summary": "Writes a short Markdown summary next to each take. A starting point for your own plugin.",
+  "executable": "run.py",
+  "events": ["take.finished"],
+  "actions": [
+    { "id": "summarise", "title": "Write take summary" }
+  ],
+  "settings": [
+    { "key": "greeting", "title": "Closing line", "type": "string", "default": "",
+      "help": "Optional text added to the end of every summary." }
+  ],
+  "produces": ["notes"]
+}

@@ -5,6 +5,7 @@ import SwiftUI
 struct PopoverView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -60,20 +61,20 @@ struct PopoverView: View {
             HStack(spacing: 5) {
                 Image(systemName: "lock").font(.system(size: 10, weight: .semibold))
                 Text("Noise cancel").foregroundStyle(Theme.mute)
-                Text(model.receiver.noiseCancelling == true ? "On" : model.receiver.noiseCancelling == false ? "Off" : "…")
+                Text(model.noiseCancelLabel)
                     .fontWeight(.semibold).foregroundStyle(Theme.ink)
             }
             .help("Set with the O/L/H switch on the receiver")
             Spacer()
-            Button { model.revealRecordings() } label: {
+            Button(action: showRecordings) {
                 HStack(spacing: 4) {
                     Text(model.format == .wav ? "WAV 24-bit" : "M4A").fontWeight(.semibold).foregroundStyle(Theme.ink)
                     if model.splitTracks { Text("· split tracks").foregroundStyle(Theme.mute) }
-                    Image(systemName: "folder").font(.system(size: 11)).foregroundStyle(Theme.mute)
+                    Image(systemName: "rectangle.stack").font(.system(size: 11)).foregroundStyle(Theme.mute)
                 }
             }
             .buttonStyle(.plain)
-            .help("Show recordings in Finder")
+            .help("Open Recordings")
             SettingsLink { Image(systemName: "gearshape").foregroundStyle(Theme.mute) }
                 .buttonStyle(.plain)
                 .help("Settings")
@@ -83,7 +84,20 @@ struct PopoverView: View {
         .padding(.horizontal, 4)
     }
 
+    private func showRecordings() {
+        NSApp.activate()
+        openWindow(id: "recordings")
+    }
+
     @ViewBuilder private var notes: some View {
+        ForEach(model.plugins.runningJobs) { job in
+            JobNote(job: job, open: showRecordings)
+        }
+        if let failed = model.plugins.jobs.last(where: { if case .failed = $0.state { true } else { false } }),
+           case .failed(let reason) = failed.state, reason != "Cancelled" {
+            Note(text: "\(failed.pluginName) failed on the \(failed.takeID.split(separator: "/").last ?? "") take: \(reason)",
+                 symbol: "exclamationmark.triangle.fill")
+        }
         if let error = model.lastError {
             Note(text: error, symbol: "exclamationmark.triangle.fill")
         }
@@ -109,6 +123,8 @@ struct PopoverView: View {
             Text("Receiver not connected").font(Theme.labelBold).foregroundStyle(Theme.ink)
             Text("Plug the DJI Mic receiver into this Mac. A hub needs to carry USB data, not just power.")
                 .font(Theme.label).foregroundStyle(Theme.mute).fixedSize(horizontal: false, vertical: true)
+            Button("Open Recordings", action: showRecordings)
+                .buttonStyle(.link).font(Theme.label).padding(.top, 2)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -290,5 +306,28 @@ private struct MasterSection: View {
 
     private func display(_ mode: ChannelMode?) -> ChannelModeDisplay {
         switch mode { case .mono: .mono; case .stereo: .stereo; default: .unknown }
+    }
+}
+
+/// A running plugin job, e.g. a transcript being generated for the last take.
+private struct JobNote: View {
+    @Environment(AppModel.self) private var model
+    let job: PluginHost.Job
+    let open: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView(value: job.fraction).progressViewStyle(.circular).controlSize(.small)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(job.title).font(Theme.labelBold).foregroundStyle(Theme.ink)
+                Text(job.message ?? "Working").font(Theme.label).foregroundStyle(Theme.mute).lineLimit(1)
+            }
+            Spacer()
+            Button("Show", action: open).buttonStyle(.link).font(Theme.label)
+            Button { model.plugins.cancel(job) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.mute) }
+                .buttonStyle(.plain).help("Cancel")
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.face))
     }
 }

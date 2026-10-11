@@ -12,3 +12,6 @@ research/
 vendor-ref/
 .impeccable/
 PRODUCT.md
+
+# Private plugin repos (each is its own git repository)
+/plugins/

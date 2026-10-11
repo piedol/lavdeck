@@ -1,4 +1,5 @@
 import LavdeckKit
+import LavdeckPluginKit
 import Foundation
 
 setvbuf(stdout, nil, _IOLBF, 0)
@@ -12,7 +13,25 @@ usage: lavdeck <command>
   set gain <dB>                       set receiver gain (-12...12, steps from caps)
   record <file.wav|file.m4a> [--seconds N]
   buttons [--seconds N] [--seize]     print transmitter/receiver button events
+  takes                               list recordings (newest first)
+  plugins                             list installed plugins
+  plugins install <folder>            install a plugin folder (symlinked)
+  plugins enable|disable <id>         turn a plugin on or off
+  run <plugin-id> <action> <take-id>  run a plugin action (or event) on a take, e.g. 2026-10-11/12.34.54
+  (takes and run accept --root <folder> to use another recordings folder)
 """
+
+func recordingsRoot() -> URL {
+    let argv = CommandLine.arguments
+    if let i = argv.firstIndex(of: "--root"), i + 1 < argv.count { return URL(fileURLWithPath: argv[i + 1]) }
+    let defaults = UserDefaults(suiteName: PluginStore.defaultsSuite)
+    return defaults?.string(forKey: "recordingsRoot").map { URL(fileURLWithPath: $0) }
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Recordings/Lavdeck")
+}
+
+func micNames() -> [String: String] {
+    (UserDefaults(suiteName: PluginStore.defaultsSuite)?.dictionary(forKey: "micNames") as? [String: String]) ?? [:]
+}
 
 func fail(_ message: String) -> Never {
     FileHandle.standardError.write(Data((message + "\n").utf8))
@@ -29,7 +48,7 @@ func describe(_ status: MicStatus) -> String {
     var lines: [String] = []
     let name = rx.identity.productName ?? "receiver"
     lines.append("RX  \(name)  fw \(rx.identity.firmware ?? "?")  \(rx.channelMode.map { "\($0)" } ?? "?")"
-        + "  gain \(rx.gainDB.map { "\($0) dB" } ?? "?")  noise-cancel \(rx.noiseCancelling.map { $0 ? "on" : "off" } ?? "?")"
+        + "  gain \(rx.gainDB.map { "\($0) dB" } ?? "?")  noise-cancel \(rx.noiseCancelling.map { $0 ? (rx.noiseCancellingLevel == 1 ? "high" : "low") : "off" } ?? "?")"
         + "  connected \(rx.connectedTransmitters.sorted().map { "TX\($0)" }.joined(separator: ","))")
     for index in status.transmitters.keys.sorted() {
         let tx = status.transmitters[index]!
@@ -48,12 +67,14 @@ func json(_ status: MicStatus) -> String {
             "name": rx.identity.productName as Any, "firmware": rx.identity.firmware as Any,
             "serial": rx.identity.serialNumber as Any, "channel": rx.channelMode.map { "\($0)" } as Any,
             "gainDB": rx.gainDB as Any, "noiseCancelling": rx.noiseCancelling as Any,
+            "noiseCancellingLevel": rx.noiseCancellingLevel as Any,
             "connected": rx.connectedTransmitters.sorted(),
         ],
     ]
     object["transmitters"] = status.transmitters.keys.sorted().map { index -> [String: Any] in
         let tx = status.transmitters[index]!
         return ["index": index, "name": tx.identity.productName as Any, "firmware": tx.identity.firmware as Any,
+                "rawFlags": tx.rawFlags.map { String($0, radix: 16) } as Any,
                 "bluetoothID": tx.identity.bluetoothID as Any, "batteryLevel": tx.batteryLevel as Any,
                 "charging": tx.isCharging as Any, "meter": tx.meterLevel as Any]
     }
@@ -159,6 +180,57 @@ case "buttons":
     print(String(format: "listening for %.0fs (open result 0x%x)…", seconds, result))
     try? await Task.sleep(for: .seconds(seconds))
     await MainActor.run { monitor.stop() }
+
+case "takes":
+    for take in TakeLibrary.scan(root: recordingsRoot(), micNames: micNames()) {
+        let d = take.descriptor
+        let speakers = d.speakers.map(\.name).joined(separator: ", ")
+        print("\(d.id)  \(d.duration.map { String(format: "%5.1fs", $0) } ?? "    ?")  \(d.channelMode ?? "?")  [\(speakers)]\(take.hasTranscript ? "  transcript" : "")")
+    }
+
+case "plugins":
+    let store = PluginStore()
+    if args.count >= 3, args[1] == "install" {
+        do { let p = try store.install(from: URL(fileURLWithPath: args[2]).standardizedFileURL); print("installed \(p.manifest.name) (\(p.id))") }
+        catch { fail("\(error)") }
+    } else if args.count >= 3, ["enable", "disable"].contains(args[1]) {
+        store.setEnabled(args[2], args[1] == "enable")
+        print("\(args[2]) \(args[1])d")
+    } else {
+        let (plugins, problems) = store.discover()
+        if plugins.isEmpty { print("no plugins in \(PluginStore.pluginsFolder.path)") }
+        for p in plugins {
+            print("\(store.isEnabled(p.id) ? "●" : "○") \(p.manifest.name) \(p.manifest.version)  \(p.id)")
+            print("    events: \((p.manifest.events ?? []).joined(separator: ", "))  actions: \((p.manifest.actions ?? []).map(\.id).joined(separator: ", "))")
+        }
+        problems.forEach { print("! \($0)") }
+    }
+
+case "run":
+    guard args.count >= 4 else { fail(usage) }
+    let store = PluginStore()
+    guard let plugin = store.discover().plugins.first(where: { $0.id == args[1] }) else { fail("no plugin \(args[1])") }
+    let parts = args[3].split(separator: "/").map(String.init)
+    guard parts.count == 2, let take = TakeLibrary.take(folder: recordingsRoot().appendingPathComponent(parts[0]), stem: parts[1], micNames: micNames()) else {
+        fail("no take \(args[3])")
+    }
+    let isEvent = plugin.manifest.events?.contains(args[2]) == true
+    let request = PluginRequest(kind: isEvent ? "event" : "action", name: args[2], take: take.descriptor,
+                                settings: store.settings(for: plugin), outputDirectory: take.descriptor.folder,
+                                pluginDirectory: plugin.folder.path)
+    let started = Date()
+    do {
+        let result = try await PluginRunner.run(plugin, request: request) { message in
+            switch message.type {
+            case .progress: print(String(format: "  %3.0f%%  %@", (message.fraction ?? 0) * 100, message.message ?? ""))
+            case .output: print("  → \(message.path ?? "") (\(message.kind ?? ""))")
+            case .log: print("  · \(message.message ?? "")")
+            case .done: print("  done\(message.message.map { ": \($0)" } ?? "")")
+            case .error: print("  error: \(message.message ?? "")")
+            }
+        }
+        print(String(format: "finished in %.1fs, %d output(s)", Date().timeIntervalSince(started), result.outputs.count))
+    } catch { fail("\(error)") }
 
 default:
     print(usage)

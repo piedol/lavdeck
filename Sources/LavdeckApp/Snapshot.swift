@@ -7,6 +7,10 @@ import SwiftUI
 enum Snapshot {
     static func runIfRequested(model: AppModel) {
         let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--recordings-window") {
+            showRecordings(model: model, dark: args.contains("--dark"), seconds: Double(args[safe: i + 1] ?? "") ?? 20)
+            return
+        }
         guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return }
         let dir = URL(fileURLWithPath: args[i + 1], isDirectory: true)
         model.debugForceLowBattery = args.contains("--force-low-battery")
@@ -88,4 +92,31 @@ enum Snapshot {
         }
         NSApp.appearance = nil
     }
+
+    nonisolated(unsafe) private static var window: NSWindow?
+
+    /// `Lavdeck --recordings-window [seconds] [--dark]` opens the Recordings window on its own and prints its
+    /// window number, so it can be captured with `screencapture -l`.
+    private static func showRecordings(model: AppModel, dark: Bool, seconds: Double) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            let w = NSWindow(contentRect: NSRect(x: 120, y: 120, width: 1040, height: 640),
+                             styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
+            w.contentViewController = NSHostingController(rootView: NavigationStack { RecordingsView() }.environment(model))
+            w.setContentSize(NSSize(width: 1040, height: 640))
+            w.title = "Recordings"
+            window = w
+            NSApp.activate()
+            w.makeKeyAndOrderFront(nil)
+            print("window \(w.windowNumber)")
+            fflush(stdout)
+            try? await Task.sleep(for: .seconds(seconds))
+            NSApp.terminate(nil)
+        }
+    }
+}
+
+private extension Array {
+    subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
 }
