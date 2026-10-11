@@ -110,3 +110,80 @@ private final class EventBox: @unchecked Sendable {
     // Switching to TX1.
     #expect(detector.update(tx1: 70, tx2: 41, at: t0.addingTimeInterval(4)) == 1)
 }
+
+// MARK: - Take library and plugins
+
+import LavdeckPluginKit
+
+private func scratchFolder() throws -> URL {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("lavdeck-tests-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url
+}
+
+@Test func takeLibraryGroupsFilesByStem() throws {
+    let root = try scratchFolder()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let day = root.appendingPathComponent("2026-10-11")
+    try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
+    for name in ["12.00.00 TX1.wav", "12.00.00 TX2.wav", "12.00.00.transcript.json", "12.00.00 TX1 · voice-ada.wav",
+                 "13.30.05 Mix.wav", "notes.txt"] {
+        FileManager.default.createFile(atPath: day.appendingPathComponent(name).path, contents: Data())
+    }
+    try TakeMetadata(started: Date(timeIntervalSince1970: 0), duration: 42, channelMode: "stereo", format: "wav",
+                     mics: [.init(index: 1, name: "Host", bluetoothID: "aa", armed: true),
+                            .init(index: 2, name: "Guest", bluetoothID: "bb", armed: true)])
+        .write(to: day.appendingPathComponent("12.00.00.take.json"))
+
+    let takes = TakeLibrary.scan(root: root)
+    #expect(takes.map(\.id).sorted() == ["2026-10-11/12.00.00", "2026-10-11/13.30.05"])
+    let duo = try #require(takes.first { $0.id == "2026-10-11/12.00.00" })
+    #expect(duo.descriptor.isTwoSpeaker)
+    #expect(duo.descriptor.speakers.map(\.name) == ["Host", "Guest"])
+    #expect(duo.descriptor.duration == 42)
+    #expect(duo.hasTranscript)
+    #expect(duo.descriptor.files.contains { $0.role == .derived && $0.kind == "audio" && $0.mic == 1 })
+    let mono = try #require(takes.first { $0.id == "2026-10-11/13.30.05" })
+    #expect(mono.descriptor.channelMode == "mono")
+    #expect(mono.descriptor.speakers.isEmpty)
+    #expect(!mono.hasTranscript)
+}
+
+private func makePlugin(_ script: String) throws -> InstalledPlugin {
+    let folder = try scratchFolder()
+    let exe = folder.appendingPathComponent("run")
+    try ("#!/bin/sh\n" + script).write(to: exe, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: exe.path)
+    let manifest = PluginManifest(id: "test.plugin", name: "Test", version: "1", summary: nil, executable: "run")
+    return InstalledPlugin(folder: folder, manifest: manifest)
+}
+
+private let sampleRequest = PluginRequest(kind: "action", name: "go",
+                                          take: TakeDescriptor(id: "d/s", folder: "/tmp", stem: "s", files: [], speakers: []),
+                                          settings: ["model": .string("small")], outputDirectory: "/tmp", pluginDirectory: "/tmp")
+
+@Test func pluginRunnerStreamsMessages() async throws {
+    let plugin = try makePlugin("""
+    read -r request
+    echo '{"type":"progress","fraction":0.5,"message":"half"}'
+    echo "not json goes to the log"
+    echo "{\\"type\\":\\"output\\",\\"path\\":\\"/tmp/$LAVDECK_SETTING_MODEL.txt\\",\\"kind\\":\\"text\\"}"
+    echo '{"type":"done"}'
+    """)
+    defer { try? FileManager.default.removeItem(at: plugin.folder) }
+    let result = try await PluginRunner.run(plugin, request: sampleRequest)
+    #expect(result.outputs.map(\.path) == ["/tmp/small.txt"])
+    #expect(result.log.contains("not json goes to the log"))
+}
+
+@Test func pluginRunnerReportsErrorsAndSurvivesUnreadStdin() async throws {
+    let plugin = try makePlugin("""
+    echo '{"type":"error","message":"model missing"}'
+    exit 1
+    """)
+    defer { try? FileManager.default.removeItem(at: plugin.folder) }
+    await #expect(throws: PluginRunError.self) { try await PluginRunner.run(plugin, request: sampleRequest) }
+    do { _ = try await PluginRunner.run(plugin, request: sampleRequest) } catch {
+        #expect("\(error)" == "model missing")
+    }
+}

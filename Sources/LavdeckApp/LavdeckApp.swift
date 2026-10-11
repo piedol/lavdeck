@@ -18,6 +18,11 @@ struct LavdeckApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        Window("Recordings", id: "recordings") {
+            RecordingsView().environment(model)
+        }
+        .defaultSize(width: 1040, height: 640)
+
         Settings {
             SettingsView().environment(model)
         }

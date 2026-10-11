@@ -10,3 +10,6 @@ DerivedData/
 docs/private/
 research/
 vendor-ref/
+
+# Private plugin repos (each is its own git repository)
+/plugins/

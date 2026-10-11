@@ -43,11 +43,17 @@ Lavdeck talks to the receiver directly over USB. Plug it into your Mac and withi
 - **Pick your mics:** arm one or both. With one armed, only that mic is recorded.
 - **Which mic is which?** Click it and talk into a mic: its strip lights up. Name each mic (say "Host" and "Guest") and the name follows that physical mic.
 - **Start and stop anywhere:** the Record button, <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd>, or a tap on either mic's link button (without changing your Mac's volume).
+- **Recordings window:** every take in one list. Filter, sort and search, including inside transcripts. Play from any line of a transcript, and move a take to the Trash with all its files.
+- **Plugins:** add what happens after you hit stop, such as transcripts or processing, written in any language. See [Plugins](#plugins).
 - **A menu bar icon that tells you what's wrong** before you open anything:
 
 <p align="center">
   <img src="docs/images/menu-bar-states.png" alt="Menu bar icon states on light and dark menu bars: healthy, recording, mic disconnected, low battery, error, receiver not connected" width="70%">
   <br><sub>Healthy · recording · a mic dropped · low battery · error · no receiver (light and dark menu bars)</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/recordings-light.png" alt="The Recordings window: a sortable list of takes with length, mode, mic names and transcript status, and a detail pane showing the files and a Host/Guest transcript with timestamps" width="90%">
 </p>
 
 It also recovers on its own when you unplug and replug the receiver, follows light and dark appearance, and labels every control for VoiceOver.
@@ -77,7 +83,8 @@ Plug in the receiver (a USB hub must carry data, not just power) and click the i
 | Tell the mics apart | **Which mic is which?**, then talk into one; click a strip's name to label it |
 | Record only one mic | Click **ARMED** on the other strip to turn it **OFF** |
 | Start / stop recording | **Record**, <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd>, or tap a mic's link button |
-| Find your takes | The folder icon in the popover, or `~/Recordings/Lavdeck/<date>/` |
+| Find your takes | Click the format label in the popover to open **Recordings**, or look in `~/Recordings/Lavdeck/<date>/` |
+| Search or transcribe old takes | **Recordings**: type in the search field, or **More › Generate transcript** (needs a transcription plugin) |
 | Change format, folder, tracks, login item | The gear icon |
 
 Noise cancelling stays on the receiver's physical **O / L / H** switch; Lavdeck shows its state.
@@ -89,6 +96,16 @@ swift build -c release
 .build/release/lavdeck status --json    # live status, read-only
 .build/release/lavdeck set channel stereo
 ```
+
+## Plugins
+
+Plugins add steps that run after a take is recorded, never during it, so they can't cost you a recording. A plugin is a folder with a small `plugin.json` and a program in any language. Lavdeck sends it the take as JSON and shows the plugin's progress in the menu bar and the Recordings window. Its settings appear in **Settings › Plugins**, and its actions appear on every take in the Recordings window.
+
+- **Events:** run automatically when a recording finishes, for example to transcribe every take.
+- **Actions:** run on demand on any take, old or new, for example **Generate transcript**.
+- **Shared formats:** a plugin that writes the standard transcript JSON gets search, speaker names and click-to-play in the Recordings window for free.
+
+Start from [`Examples/plugins/take-info`](Examples/plugins/take-info), which includes a one-file Python helper. The protocol is documented in **[docs/PLUGINS.md](docs/PLUGINS.md)**. A plugin runs with your permissions, so install only plugins you trust. Plugins are installed switched off.
 
 ## Compatibility
 
@@ -115,10 +132,12 @@ The receiver has a firmware‑update channel on the same USB connection. Lavdeck
 The receiver speaks DJI's DUML protocol on a vendor USB interface alongside its normal audio interface. Lavdeck reads the receiver's status pushes, sends a handful of settings commands, and records the receiver's standard USB audio with AVFoundation. The protocol, as far as it's been mapped, is documented in **[docs/PROTOCOL.md](docs/PROTOCOL.md)**, and the app's visual system in [DESIGN.md](DESIGN.md).
 
 ```
-Sources/LavdeckKit   USB link, DUML framing, status decoder, allowlisted commands, recorder
-Sources/LavdeckApp   SwiftUI menu bar app
-Sources/lavdeck      command-line tool
-Tests                decoder and framing tests on captured frames
+Sources/LavdeckKit        USB link, DUML framing, status decoder, allowlisted commands, recorder, take library, plugin runner
+Sources/LavdeckPluginKit  plugin protocol and transcript types (usable by Swift plugins)
+Sources/LavdeckApp        SwiftUI menu bar app and Recordings window
+Sources/lavdeck           command-line tool
+Examples/plugins          example plugin with a Python helper
+Tests                     decoder and framing tests on captured frames, take library and plugin runner tests
 ```
 
 ## Contributing
