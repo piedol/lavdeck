@@ -22,6 +22,14 @@ enum Snapshot {
             } else {
                 try? await Task.sleep(for: .seconds(4))
                 render(model: model, name: "idle", dir: dir)
+                if args.contains("--identify") {
+                    model.startIdentify()
+                    try? await Task.sleep(for: .seconds(3))
+                    render(model: model, name: "identify", dir: dir)
+                    await model.endIdentify()
+                    try? await Task.sleep(for: .seconds(1))
+                    render(model: model, name: "after-identify", dir: dir)
+                }
             }
             if args.contains("--record") && !args.contains("--demo") {
                 model.startRecording()
