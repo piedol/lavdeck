@@ -75,14 +75,14 @@ Payload: `03, total length (u16 LE), records…`. Each record is `type (1), inde
 | `0x02` | transmitter status bits, `w = u32 @ r+6` |
 | `0x03` | receiver status, `h = u16 @ r+6` plus fixed‑offset bytes |
 | `0x04` | Bluetooth ID suffix (ASCII) |
-| `0x05` | level meter (1 byte, receiver units) |
+| `0x05` | live level meter (1 byte, receiver units: ~30 quiet room, ~75 loud speech). Per mic in stereo; the mixed level in mono |
 | `0x06` | product name (ASCII) |
 
 Transmitter `w` (type `0x02`): bit 2 mute, bits 5–6 noise‑cancel level, bit 8 noise cancel, bit 9 charging, **bits 10–12 battery (0–7, receiver estimate)**, signed gain at byte `r+0x0d`.
 
 Receiver `h` (type `0x03`): bits 0–1 environment, bit 2 lossless, bits 3–4 noise‑cancel level, **bit 5 noise cancel**, bit 8 auto power‑off, **bits 9–11 channel mode**, bits 13–15 receiver battery. Signed **gain (dB)** at byte `r+0x08`. **Connected transmitter mask** at byte `r+0x1e` (bit 0 = TX1, bit 1 = TX2). Byte `r+0x22` bit 3 = attached over USB.
 
-On the Mobile RX with Mic Mini transmitters, both transmitter records often carry identical values, so per‑transmitter battery and meter are best treated as approximate.
+In mono the receiver mixes both mics before anything reaches the host, so both `0x05` meters carry the same mixed level; in stereo they track each mic separately (verified against left/right audio). Battery bits are the receiver's estimate.
 
 ### Set params `0x5B/0x01`
 

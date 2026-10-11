@@ -99,6 +99,7 @@ swift build -c release
 **Known limits**
 
 - Battery is DJI's own 0–7 estimate, shown as such.
+- In mono the receiver mixes both mics, so each strip shows the mixed level (labelled **mono mix**). Switch to stereo to see each mic's own level.
 - The receiver accepts a per‑mic mute but doesn't act on it, so Lavdeck records one mic by keeping only its channel instead.
 - The Mac can't tell which mic's button was tapped; either one toggles recording.
 - **Firmware updates stay in DJI Mimo.** Lavdeck deliberately can't send them.
