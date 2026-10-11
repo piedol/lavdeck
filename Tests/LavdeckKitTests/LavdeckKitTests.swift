@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import LavdeckKit
 
@@ -93,4 +94,19 @@ private let identityPush = bytes("55 b4 04 83 5a 02 00 00 00 5b 03 03 a4 00 01 0
 private final class EventBox: @unchecked Sendable {
     var items: [MicButtonEvent] = []
     func append(_ event: MicButtonEvent) { items.append(event) }
+}
+
+@Test func talkingDetectorPicksTheLouderMicAndHolds() {
+    var detector = TalkingDetector()
+    let t0 = Date(timeIntervalSince1970: 1000)
+    // At rest and under a shared sound the two mics stay close: nobody is "talking".
+    #expect(detector.update(tx1: 34, tx2: 31, at: t0) == nil)
+    #expect(detector.update(tx1: 65, tx2: 58, at: t0) == nil)
+    // Speaking into TX2 separates the meters.
+    #expect(detector.update(tx1: 40, tx2: 74, at: t0.addingTimeInterval(1)) == 2)
+    // Held briefly through a pause, then released.
+    #expect(detector.update(tx1: 38, tx2: 40, at: t0.addingTimeInterval(2)) == 2)
+    #expect(detector.update(tx1: 38, tx2: 40, at: t0.addingTimeInterval(3)) == nil)
+    // Switching to TX1.
+    #expect(detector.update(tx1: 70, tx2: 41, at: t0.addingTimeInterval(4)) == 1)
 }
