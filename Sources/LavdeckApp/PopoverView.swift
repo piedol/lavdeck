@@ -125,7 +125,7 @@ private struct IdentifyBanner: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(model.talkingMic.map { "That’s \(model.displayName($0)) (TX\($0))." } ?? "Talk into one mic. Its strip lights up.")
                     .font(Theme.labelBold).foregroundStyle(Theme.ink)
-                Text("Click a strip’s name to label it, e.g. “Host”. The receiver is in stereo while this is open; your setting comes back when you’re done.")
+                Text("Click a strip’s name to label it. Stereo is on while this is open; your setting returns when you’re done.")
                     .font(Theme.label).foregroundStyle(Theme.mute).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -180,7 +180,7 @@ private struct ChannelStrip: View {
                 NamePlate(title: model.recordingMode == .stereo ? "\(name) · \(index == 1 ? "L" : "R")" : name,
                           subtitle: "→ \(file)", armed: true, dimmed: !linked)
             } else if model.isRecording {
-                NamePlate(title: name, subtitle: "off", hollow: true)
+                NamePlate(title: name, tag: named ? "TX\(index)" : nil, hollow: true)
             } else if editing {
                 TextField("TX\(index)", text: $draft)
                     .textFieldStyle(.plain)
@@ -189,7 +189,7 @@ private struct ChannelStrip: View {
                     .focused($fieldFocused)
                     .onSubmit { commit() }
                     .onExitCommand { editing = false }
-                    .padding(.horizontal, 7).padding(.vertical, 12)
+                    .padding(.horizontal, 7).padding(.vertical, 6)
                     .background(RoundedRectangle(cornerRadius: 5).fill(Theme.plate))
                     .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.green, lineWidth: 1.5))
                     .onAppear { fieldFocused = true }
@@ -199,9 +199,7 @@ private struct ChannelStrip: View {
                     draft = named ? name : ""
                     editing = true
                 } label: {
-                    NamePlate(title: name,
-                              subtitle: talking ? "talking" : named ? "TX\(index)" : (tx?.identity.bluetoothID ?? "—"),
-                              dimmed: !linked)
+                    NamePlate(title: name, tag: named ? "TX\(index)" : nil, dimmed: !linked)
                 }
                 .buttonStyle(.plain)
                 .help("Click to name this mic (the name follows this physical mic)")

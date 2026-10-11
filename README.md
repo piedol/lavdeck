@@ -41,6 +41,7 @@ Lavdeck talks to the receiver directly over USB. Plug it into your Mac and withi
 - **Recording** to 24‑bit WAV (or M4A), into a dated folder with no save dialog.
 - **Separate tracks:** in stereo, save each mic as its own file next to the stereo take.
 - **Pick your mics:** arm one or both. With one armed, only that mic is recorded.
+- **Which mic is which?** Click it and talk into a mic: its strip lights up. Name each mic (say "Host" and "Guest") and the name follows that physical mic.
 - **Start and stop anywhere:** the Record button, <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd>, or a tap on either mic's link button (without changing your Mac's volume).
 - **A menu bar icon that tells you what's wrong** before you open anything:
 
@@ -73,6 +74,7 @@ Plug in the receiver (a USB hub must carry data, not just power) and click the i
 |---|---|
 | Switch mono / stereo | Click **MONO** or **STEREO** in the popover |
 | Change gain | Drag the fader or click a value |
+| Tell the mics apart | **Which mic is which?**, then talk into one; click a strip's name to label it |
 | Record only one mic | Click **ARMED** on the other strip to turn it **OFF** |
 | Start / stop recording | **Record**, <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd>, or tap a mic's link button |
 | Find your takes | The folder icon in the popover, or `~/Recordings/Lavdeck/<date>/` |

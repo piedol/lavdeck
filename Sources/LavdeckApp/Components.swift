@@ -2,9 +2,12 @@ import AppKit
 import SwiftUI
 
 /// Black scribble strip naming a channel; turns red and names its file while recording.
+/// One line (the mic's name, with its slot as a small tag) unless a second line carries live info.
 struct NamePlate: View {
     let title: String
-    let subtitle: String
+    var subtitle: String? = nil
+    /// Small trailing tag, e.g. the slot ("TX1") when the mic has a custom name.
+    var tag: String? = nil
     var armed = false
     var dimmed = false
     /// A channel left out of the current take: drawn hollow so it stays readable.
@@ -12,12 +15,24 @@ struct NamePlate: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(title).font(Theme.labelBold).tracking(0.5).foregroundStyle(hollow ? Theme.ink : Theme.plateText)
-            Text(subtitle).font(Theme.mono).foregroundStyle(hollow ? Theme.mute : armed ? Color(hex: 0xFFE1DE) : Theme.plateSub)
-                .lineLimit(1).truncationMode(.middle)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(title).font(Theme.labelBold).tracking(0.5)
+                    .foregroundStyle(hollow ? Theme.ink : Theme.plateText)
+                    .lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 0)
+                if let tag {
+                    Text(tag).font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(hollow ? Theme.mute : Theme.plateSub)
+                }
+            }
+            if let subtitle {
+                Text(subtitle).font(Theme.mono)
+                    .foregroundStyle(hollow ? Theme.mute : armed ? Color(hex: 0xFFE1DE) : Theme.plateSub)
+                    .lineLimit(1).truncationMode(.middle)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 7).padding(.vertical, 5)
+        .padding(.horizontal, 7).padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 5).fill(hollow ? Theme.well : armed ? Theme.rec : Theme.plate))
         .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Theme.hairline, lineWidth: 0.5))
         .opacity(dimmed ? 0.45 : 1)
