@@ -113,7 +113,9 @@ final class AppModel {
 
     /// Linked transmitters whose battery estimate is at or below 1 of 7.
     var lowBattery: [Int] {
-        receiver.connectedTransmitters.filter { debugForceLowBattery || (transmitter($0)?.batteryLevel ?? 7) <= 1 }.sorted()
+        receiver.connectedTransmitters.filter {
+            debugForceLowBattery || ((transmitter($0)?.batteryLevel ?? 7) <= 1 && transmitter($0)?.isCharging != true)
+        }.sorted()
     }
 
     var glyph: GlyphState {
