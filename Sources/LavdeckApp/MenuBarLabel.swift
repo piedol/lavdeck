@@ -6,10 +6,17 @@ import SwiftUI
 /// no receiver shows it hollow.
 struct MenuBarLabel: View {
     let state: GlyphState
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         Image(nsImage: Self.image(for: state))
             .accessibilityLabel(accessibility)
+            .onAppear {
+                // The right-click menu lives outside SwiftUI; give it the scene's window actions.
+                AppActions.openRecordings = { NSApp.activate(); openWindow(id: "recordings") }
+                AppActions.openSettings = { NSApp.activate(); openSettings() }
+            }
     }
 
     private var accessibility: String {

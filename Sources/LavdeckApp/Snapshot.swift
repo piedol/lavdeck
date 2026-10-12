@@ -22,6 +22,16 @@ enum Snapshot {
             }
             exit(0)
         }
+        if let i = args.firstIndex(of: "--window-classes"), i + 1 < args.count {
+            // Development aid: list this app's window classes (to find the status item window).
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                let lines = NSApp.windows.map { "\(type(of: $0)) \($0.frame)" }.joined(separator: "\n")
+                try? lines.write(toFile: args[i + 1], atomically: true, encoding: .utf8)
+                NSApp.terminate(nil)
+            }
+            return
+        }
         if args.contains("--quit-while-recording") {
             // Development aid: start a take, then quit mid-recording like macOS's "Quit & Reopen" does.
             Task { @MainActor in
