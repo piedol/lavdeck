@@ -6,6 +6,7 @@ struct PopoverView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -98,7 +99,8 @@ struct PopoverView: View {
             }
             .buttonStyle(.plain)
             .help("Open Recordings")
-            SettingsLink { Image(systemName: "gearshape").foregroundStyle(Theme.mute) }
+            // A menu bar app isn't frontmost, so bring Lavdeck forward or Settings opens behind other windows.
+            Button { NSApp.activate(); openSettings() } label: { Image(systemName: "gearshape").foregroundStyle(Theme.mute) }
                 .buttonStyle(.plain)
                 .help("Settings")
         }
