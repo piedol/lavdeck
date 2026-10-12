@@ -37,12 +37,30 @@ struct PopoverView: View {
                 HStack(spacing: 5) {
                     Circle().fill(Theme.rec).frame(width: 8, height: 8)
                     Text("REC").font(Theme.caps).foregroundStyle(Theme.recText)
+                    if let started = model.recordingStarted {
+                        Text(timerInterval: started...Date.distantFuture, countsDown: false)
+                            .font(Theme.mono).foregroundStyle(Theme.recText)
+                    }
                     ForEach(model.captureSources, id: \.self) { source in
                         Text("· \(source == "screen" ? "Screen" : source == "camera" ? "Camera" : source.capitalized)")
                             .font(Theme.label).foregroundStyle(Theme.mute)
                     }
+                    // The mixer has its own Stop; when the receiver drops the mixer is replaced, so keep one here.
+                    if !model.isConnected {
+                    Button { model.stopRecording() } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "stop.fill").font(.system(size: 9, weight: .bold))
+                            Text("Stop").font(Theme.labelBold)
+                        }
+                        .foregroundStyle(Theme.onInk)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Capsule().fill(Theme.rec))
+                    }
+                    .buttonStyle(.plain)
+                    .fixedSize()
+                    .help("Stop recording (⌥⌘R)")
+                    }
                 }
-                .accessibilityElement(children: .combine)
             } else if model.isConnected && !model.identifying {
                 Button { model.startIdentify() } label: {
                     HStack(spacing: 4) {
@@ -244,7 +262,7 @@ private struct ChannelStrip: View {
                 if model.isRecording, !armed {
                     Text("not rec")
                 } else if let db = model.dBFS(index) {
-                    Text("\(db) dBFS")
+                    Text(db <= -90 ? "silent" : "\(db) dBFS")
                 } else if let fw = tx?.identity.firmware {
                     Text(fw.split(separator: ".").prefix(3).joined(separator: "."))
                         .padding(.horizontal, outdated ? 5 : 0).padding(.vertical, outdated ? 2 : 0)

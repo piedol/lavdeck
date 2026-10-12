@@ -348,10 +348,10 @@ final class AppModel {
         recordingSolo = nil
         if let error {
             lastError = "Recording stopped with an error: \(error.localizedDescription)"
-            Task { _ = await captureDone?.value; self.captureSources = [] }
+            Task { _ = await captureDone?.value; self.captureSources = []; self.takeSaved() }
             return
         }
-        guard let stem else { return }
+        guard let stem else { takeSaved(); return }
         // Snapshot who was on which mic now; names can change later.
         let mics = [1, 2].map { index in
             TakeMetadata.Mic(index: index, name: displayName(index), bluetoothID: transmitter(index)?.identity.bluetoothID,
@@ -390,7 +390,25 @@ final class AppModel {
                 plugins.takeFinished(take)
             }
             libraryRevision += 1
+            takeSaved()
         }
+    }
+
+    private var takeSavedWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// Stops a running take and waits until its files and metadata are written (for quitting).
+    func finishRecordingForQuit() async {
+        guard isRecording || currentStem != nil else { return }
+        await withCheckedContinuation { continuation in
+            takeSavedWaiters.append(continuation)
+            stopRecording()
+        }
+    }
+
+    private func takeSaved() {
+        let waiters = takeSavedWaiters
+        takeSavedWaiters = []
+        waiters.forEach { $0.resume() }
     }
 
     /// Bumped when a take is written or deleted, so the recordings manager refreshes.
