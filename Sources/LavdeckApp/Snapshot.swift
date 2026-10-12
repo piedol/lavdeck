@@ -48,6 +48,9 @@ enum Snapshot {
                 model.loadDemo(recording: true)
                 try? await Task.sleep(for: .milliseconds(300))
                 render(model: model, name: "recording", dir: dir)
+                model.loadDemoIdentify()
+                try? await Task.sleep(for: .milliseconds(300))
+                render(model: model, name: "identify", dir: dir)
             } else {
                 try? await Task.sleep(for: .seconds(4))
                 render(model: model, name: "idle", dir: dir)

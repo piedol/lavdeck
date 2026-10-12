@@ -439,18 +439,20 @@ final class AppModel {
         s.receiver.identity.firmware = "02.03.11.00"
         s.receiver.channelMode = .stereo
         s.receiver.gainDB = 0
-        s.receiver.noiseCancelling = false
+        s.receiver.noiseCancelling = true
+        s.receiver.noiseCancellingLevel = 1
         s.receiver.connectedTransmitters = [1, 2]
-        for (index, id, fw, meter) in [(1, "a1b2c3", "02.03.17.00", 58), (2, "d4e5f6", "02.03.17.00", 41)] {
+        for (index, id, fw, meter, battery, charging) in [(1, "a1b2c3", "02.03.17.00", 58, 5, false), (2, "d4e5f6", "02.03.17.00", 41, 3, !recording)] {
             var tx = TransmitterStatus(index: index)
             tx.identity.productName = "DJI Mic Mini"
             tx.identity.bluetoothID = id
             tx.identity.firmware = fw
-            tx.batteryLevel = 5
-            tx.isCharging = false
+            tx.batteryLevel = battery
+            tx.isCharging = charging
             tx.meterLevel = meter
             s.transmitters[index] = tx
         }
+        demoNames = ["a1b2c3": "Host", "d4e5f6": "Guest"]
         status = s
         isConnected = true
         knownTransmitters = [1, 2]
@@ -469,8 +471,19 @@ final class AppModel {
 
     // MARK: Identify and naming
 
+    /// Names used by the demo snapshots, so they never touch the user's saved names.
+    private var demoNames: [String: String] = [:]
+
+    /// Demo snapshot of identify mode: one mic highlighted as talking.
+    func loadDemoIdentify() {
+        loadDemo(recording: false)
+        identifying = true
+        talkingMic = 1
+    }
+
     /// The name shown on a strip: the user's name for that physical mic, else the slot.
     func displayName(_ index: Int) -> String {
+        if demo, let id = transmitter(index)?.identity.bluetoothID, let name = demoNames[id] { return name }
         if let id = transmitter(index)?.identity.bluetoothID, let name = micNames[id], !name.isEmpty { return name }
         return "TX\(index)"
     }

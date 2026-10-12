@@ -30,21 +30,27 @@ Lavdeck talks to the receiver directly over USB. Plug it into your Mac and withi
 ## What it does
 
 <p align="center">
-  <img src="docs/images/popover-light.png" alt="Lavdeck idle: TX1 and TX2 channel strips with link lights, level meters, battery and firmware, plus gain fader and mono/stereo switch" width="45%">
+  <img src="docs/images/popover-light.png" alt="Lavdeck idle: strips named Host and Guest with link lights, level meters, battery (Guest charging) and firmware, plus gain fader, mono/stereo switch and noise cancel set to High" width="32%">
   &nbsp;
-  <img src="docs/images/recording-dark.png" alt="Lavdeck recording in stereo, dark appearance: each strip names the file it is writing" width="45%">
+  <img src="docs/images/identify-light.png" alt="Which mic is which? Host's strip lights up while Host talks, with a banner saying That's Host (TX1)" width="32%">
+  &nbsp;
+  <img src="docs/images/recording-dark.png" alt="Lavdeck recording in stereo, dark appearance: elapsed time in the header and each strip names the file it is writing" width="32%">
+  <br><sub>Named mics with battery and charging · finding which mic is which · recording in stereo</sub>
 </p>
 
-- **Live status for every mic:** link light, level meter, battery estimate and firmware for TX1 and TX2, straight from the receiver.
+- **Live status for every mic:** link light, level meter, battery estimate, a ⚡ while it charges, and firmware for TX1 and TX2, straight from the receiver.
+- **Noise cancelling at a glance:** shows whether the receiver's switch is on Off, Low or High.
 - **Mono / stereo** with one click. In stereo, TX1 is left and TX2 is right.
 - **Receiver gain** on a five‑detent fader: −12, −6, 0, +6, +12 dB.
 - **Recording** to 24‑bit WAV (or M4A), into a dated folder with no save dialog.
 - **Separate tracks:** in stereo, save each mic as its own file next to the stereo take.
 - **Pick your mics:** arm one or both. With one armed, only that mic is recorded.
 - **Which mic is which?** Click it and talk into a mic: its strip lights up. Name each mic (say "Host" and "Guest") and the name follows that physical mic.
-- **Start and stop anywhere:** the Record button, <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd>, or a tap on either mic's link button (without changing your Mac's volume).
+- **Start and stop anywhere:** the Record button, <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd>, or a tap on either mic's link button (without changing your Mac's volume). The elapsed time sits next to REC, and Stop is always on screen while recording, even if the receiver drops.
+- **Takes survive quitting:** quit Lavdeck mid‑take (or let macOS "Quit & Reopen" it after a permission change) and the take is stopped and saved first.
 - **Recordings window:** every take in one list. Filter, sort and search, including inside transcripts. Play from any line of a transcript, and move a take to the Trash with all its files.
-- **Plugins:** add what happens after you hit stop, such as transcripts or processing, written in any language. See [Plugins](#plugins).
+- **Plugins:** add what happens alongside or after a recording, such as transcripts, screen and camera capture, or an editor, written in any language. See [Plugins](#plugins).
+- **Battery history:** every change in a mic's battery estimate or charging state is logged to `~/Library/Logs/Lavdeck/battery.log`, so you can see how long a charge lasts.
 - **A menu bar icon that tells you what's wrong** before you open anything:
 
 <p align="center">
@@ -93,20 +99,26 @@ Plug in the receiver (a USB hub must carry data, not just power) and click the i
 | Switch mono / stereo | Click **MONO** or **STEREO** in the popover |
 | Change gain | Drag the fader or click a value |
 | Tell the mics apart | **Which mic is which?**, then talk into one; click a strip's name to label it |
+| Check battery and charging | The cells under each meter (0–7 estimate); ⚡ while charging. History in `~/Library/Logs/Lavdeck/battery.log` |
 | Record only one mic | Click **ARMED** on the other strip to turn it **OFF** |
 | Start / stop recording | **Record**, <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd>, or tap a mic's link button |
 | Find your takes | Click the format label in the popover to open **Recordings**, or look in `~/Recordings/Lavdeck/<date>/` |
 | Search or transcribe old takes | **Recordings**: type in the search field, or **More › Generate transcript** (needs a transcription plugin) |
+| Open a take in an app plugin | **Recordings** › select a take › **Open in …** |
+| Turn plugins on and allow what they need | Gear icon › **Plugins** |
 | Change format, folder, tracks, login item | The gear icon |
 
-Noise cancelling stays on the receiver's physical **O / L / H** switch; Lavdeck shows its state.
+Noise cancelling stays on the receiver's physical **O / L / H** switch; Lavdeck shows which position it's in.
 
 There's also a small command‑line tool for scripting and debugging:
 
 ```bash
 swift build -c release
-.build/release/lavdeck status --json    # live status, read-only
+.build/release/lavdeck status --json    # live status, read-only (battery, charging, levels)
 .build/release/lavdeck set channel stereo
+.build/release/lavdeck takes             # list recorded takes
+.build/release/lavdeck plugins           # list installed plugins
+.build/release/lavdeck run <plugin-id> <action> <take-id>   # run a plugin action on a take
 ```
 
 ## Plugins
@@ -114,9 +126,11 @@ swift build -c release
 Plugins add steps that run after a take is recorded, never during it, so they can't cost you a recording. A plugin is a folder with a small `plugin.json` and a program in any language. Lavdeck sends it the take as JSON and shows the plugin's progress in the menu bar and the Recordings window. Its settings appear in **Settings › Plugins**, and its actions appear on every take in the Recordings window.
 
 - **Events:** run automatically when a recording finishes, for example to transcribe every take.
-- **Capture:** record alongside the mic, for example the screen and a webcam, with every file lined up to the audio.
+- **Capture:** record alongside the mic, for example the screen and a webcam. Lavdeck notes when each file's first frame happened relative to the audio, so every file lines up to the frame.
 - **Actions:** run on demand on any take, old or new, for example **Generate transcript**.
+- **Apps:** a plugin can ship a companion app, such as an editor; every take gets an **Open in …** button.
 - **Shared formats:** a plugin that writes the standard transcript JSON gets search, speaker names and click-to-play in the Recordings window for free.
+- **One permission prompt, not one per plugin:** plugins never ask macOS for anything. They declare what they need (screen recording, camera), Lavdeck asks once and shows what's allowed in **Settings › Plugins**, and every plugin runs under Lavdeck's permissions.
 
 Start from [`Examples/plugins/take-info`](Examples/plugins/take-info), which includes a one-file Python helper. The protocol is documented in **[docs/PLUGINS.md](docs/PLUGINS.md)**. A plugin runs with your permissions, so install only plugins you trust. Plugins are installed switched off.
 
@@ -130,7 +144,7 @@ Start from [`Examples/plugins/take-info`](Examples/plugins/take-info), which inc
 
 **Known limits**
 
-- Battery is DJI's own 0–7 estimate, shown as such.
+- Battery is DJI's own 0–7 estimate, shown as such; there's no finer percentage to read. Charging is what each mic reports, and a mic that was just in use can take a few minutes to start charging.
 - In mono the receiver mixes both mics, so each strip shows the mixed level (labelled **mono mix**). Switch to stereo to see each mic's own level.
 - The receiver accepts a per‑mic mute but doesn't act on it, so Lavdeck records one mic by keeping only its channel instead.
 - The Mac can't tell which mic's button was tapped; either one toggles recording.
@@ -145,12 +159,12 @@ The receiver has a firmware‑update channel on the same USB connection. Lavdeck
 The receiver speaks DJI's DUML protocol on a vendor USB interface alongside its normal audio interface. Lavdeck reads the receiver's status pushes, sends a handful of settings commands, and records the receiver's standard USB audio with AVFoundation. The protocol, as far as it's been mapped, is documented in **[docs/PROTOCOL.md](docs/PROTOCOL.md)**, and the app's visual system in [DESIGN.md](DESIGN.md).
 
 ```
-Sources/LavdeckKit        USB link, DUML framing, status decoder, allowlisted commands, recorder, take library, plugin runner
-Sources/LavdeckPluginKit  plugin protocol and transcript types (usable by Swift plugins)
-Sources/LavdeckApp        SwiftUI menu bar app and Recordings window
+Sources/LavdeckKit        USB link, DUML framing, status decoder, allowlisted commands, recorder, take library, plugin and capture runners
+Sources/LavdeckPluginKit  plugin protocol (post, capture and app plugins) and transcript types, usable by Swift plugins
+Sources/LavdeckApp        SwiftUI menu bar app, Recordings window, plugin settings and permissions
 Sources/lavdeck           command-line tool
 Examples/plugins          example plugin with a Python helper
-Tests                     decoder and framing tests on captured frames, take library and plugin runner tests
+Tests                     decoder and framing tests on captured frames; take library, plugin, capture and app-plugin tests
 ```
 
 ## Contributing
