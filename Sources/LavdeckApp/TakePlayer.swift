@@ -47,14 +47,24 @@ struct TakeMedia: Identifiable, Hashable {
     }
 }
 
+/// The playhead, published apart from ``TakePlayer`` so only the views that show it (the scrubber, the transcript
+/// highlight) redraw ten times a second. Publishing it from the player redrew the whole Recordings window on
+/// every tick while playing, which swallowed clicks on other takes and files.
+@MainActor
+final class PlaybackClock: ObservableObject {
+    @Published fileprivate(set) var time: Double = 0
+}
+
 /// Plays one take's media with AVPlayer. Raw screen and camera recordings have no mic audio, so they play as a
 /// composition with the take's audio placed at the offset Lavdeck recorded, staying in sync.
 @MainActor
 final class TakePlayer: ObservableObject {
     let player = AVPlayer()
+    let clock = PlaybackClock()
     @Published private(set) var isPlaying = false
-    @Published private(set) var currentTime: Double = 0
     @Published private(set) var duration: Double = 0
+    /// Not published; see ``clock``.
+    private(set) var currentTime: Double = 0 { didSet { if clock.time != currentTime { clock.time = currentTime } } }
     @Published private(set) var media: TakeMedia?
     /// Why the loaded media can't play (moved, deleted or unreadable).
     @Published private(set) var error: String?
@@ -68,12 +78,12 @@ final class TakePlayer: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.currentTime = time.seconds.isFinite ? time.seconds : 0
-                if let d = self.player.currentItem?.duration.seconds, d.isFinite { self.duration = d }
+                if let d = self.player.currentItem?.duration.seconds, d.isFinite, d != self.duration { self.duration = d }
             }
         }
         rateObservation = player.observe(\.timeControlStatus) { [weak self] player, _ in
             let playing = player.timeControlStatus != .paused
-            Task { @MainActor in self?.isPlaying = playing }
+            Task { @MainActor in if let self, self.isPlaying != playing { self.isPlaying = playing } }
         }
     }
 
@@ -98,13 +108,14 @@ final class TakePlayer: ObservableObject {
             player.replaceCurrentItem(with: item)
             // A paused player shows black until a frame is decoded for it: wait until the item is ready, then
             // seek once so the first (or current) frame appears without pressing Play.
-            for await status in item.publisher(for: \.status).values {
+            // (Polled: the KVO publisher's async sequence never delivered the change from .unknown.)
+            while item.status == .unknown {
+                try? await Task.sleep(for: .milliseconds(15))
                 if Task.isCancelled { return }
-                if status == .failed {
-                    error = item.error?.localizedDescription ?? "This file can’t be played."
-                    return
-                }
-                if status == .readyToPlay { break }
+            }
+            if item.status == .failed {
+                error = item.error?.localizedDescription ?? "This file can’t be played."
+                return
             }
             guard !Task.isCancelled else { return }
             await player.seek(to: CMTime(seconds: keep, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
@@ -133,10 +144,6 @@ final class TakePlayer: ObservableObject {
         takeID = nil
         error = nil
         currentTime = 0
-    }
-
-    func isInside(_ segment: TranscriptDocument.Segment) -> Bool {
-        currentTime >= segment.start && currentTime < segment.end
     }
 
     private static func asset(for media: TakeMedia, of take: Take) async -> AVAsset {

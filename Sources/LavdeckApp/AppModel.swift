@@ -71,6 +71,8 @@ final class AppModel {
     private var captureStop: Task<(outputs: [CaptureOutput], problems: [CaptureHost.Problem]), Never>?
     /// Sources capture plugins have started for the current take, e.g. `screen`, `camera`.
     private(set) var captureSources: [String] = []
+    /// Sources that reported an error before their first frame, so Record doesn't wait for them.
+    private var captureFailed: Set<String> = []
 
     init() {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -219,8 +221,11 @@ final class AppModel {
         isRecording ? stopRecording() : startRecording()
     }
 
+    /// True between Record and the first audio sample while cameras and screen capture warm up.
+    private(set) var isStarting = false
+
     func startRecording() {
-        guard !isRecording else { return }
+        guard !isRecording, !isStarting else { return }
         guard !armed.isEmpty else {
             // The hotkey and mic taps work with the popover closed, so say why nothing happened.
             NSSound.beep()
@@ -230,8 +235,10 @@ final class AppModel {
         lastError = nil
         // A new take makes the last take's processing failure old news.
         while let failed = plugins.automaticFailure { plugins.dismiss(failed) }
+        isStarting = true
         Task { [weak self] in
             guard let self else { return }
+            defer { isStarting = false }
             if identifying { await endIdentify() }
             if soloMic != nil, receiver.channelMode != .stereo {
                 // One mic alone needs the receiver in stereo (TX1 left, TX2 right); mono mixes both.
@@ -260,12 +267,19 @@ final class AppModel {
                     let kind = receiver.channelMode == .stereo ? "Stereo" : "Mix"
                     target = day.appendingPathComponent("\(stamp) \(kind).\(format.rawValue)")
                 }
-                try recorder.start(to: target, format: format)
-                await startCapture(folder: day, stem: stamp)
+                // Video first: a camera takes about a second to deliver its first frame, so starting it after the
+                // audio left the first second of every video black. Start capture, wait for each source's first
+                // frame, then start the audio, so the video covers the take from its first sample.
+                let expected = await startCapture(folder: day, stem: stamp)
+                await waitForCapture(expected, timeout: 5)
+                do { try recorder.start(to: target, format: format) } catch {
+                    stopCapture()
+                    throw error
+                }
                 currentStem = stem
                 recordingMode = receiver.channelMode
                 recordingSolo = soloMic
-                recordingStarted = now
+                recordingStarted = Date()
                 isRecording = true
                 levelTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15, repeats: true) { [weak self] _ in
                     Task { @MainActor in self?.recordingLevels = self?.recorder.channelLevels() ?? [] }
@@ -306,10 +320,13 @@ final class AppModel {
         recorder.stop()
     }
 
-    private func startCapture(folder: URL, stem: String) async {
+    /// Launches the capture plugins and returns the sources expected to start (switched on, permission granted).
+    @discardableResult
+    private func startCapture(folder: URL, stem: String) async -> Set<String> {
         let enabled = plugins.capturePlugins
         captureSources = []
-        guard !enabled.isEmpty else { return }
+        captureFailed = []
+        guard !enabled.isEmpty else { return [] }
         // Lavdeck asks for each permission once, for every plugin; plugins run under Lavdeck's grants.
         let needed = Array(Set(enabled.flatMap(plugins.neededPermissions)))
         await permissions.request(needed)
@@ -326,6 +343,23 @@ final class AppModel {
                                   take: CaptureTake(folder: folder.path, stem: stem), granted: granted)
         if let problem = problems.first { lastError = "\(problem.pluginName): \(problem.message)" }
         capture = host.isRunning ? host : nil
+        guard capture != nil else { return [] }
+        let toggles = plugins.captureToggles
+        return Set(enabled.flatMap { plugin -> [String] in
+            let own = toggles.filter { $0.plugin.id == plugin.id }
+            let sources = own.isEmpty ? (plugin.manifest.capture?.sources ?? []) : own.filter(plugins.isOn).map(\.source)
+            return sources.filter { source in PermissionCenter.permission(forSource: source).map(granted.contains) ?? true }
+        })
+    }
+
+    /// Waits until every expected source has written its first frame (or failed), at most `timeout` seconds.
+    private func waitForCapture(_ expected: Set<String>, timeout: Double) async {
+        guard !expected.isEmpty else { return }
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline, capture != nil,
+              !expected.isSubset(of: Set(captureSources).union(captureFailed)) {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
     }
 
     private func captureEvent(_ plugin: InstalledPlugin, _ event: CaptureEvent) {
@@ -333,6 +367,7 @@ final class AppModel {
         case .started:
             if let source = event.source, !captureSources.contains(source) { captureSources.append(source) }
         case .error:
+            if let source = event.source { captureFailed.insert(source) }
             lastError = "\(plugin.manifest.name): \(event.message ?? "error")"
         default: break
         }

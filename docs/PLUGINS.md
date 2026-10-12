@@ -215,6 +215,8 @@ When a recording starts, Lavdeck launches the capture executable (the manifest's
 
 `log` and `error` lines work as they do for post plugins. Lavdeck waits up to 30 seconds after `stop` for files to finish writing.
 
+**Start order.** Lavdeck starts capture *before* the audio: it sends `start`, waits until every source it expects (switched on, permission granted) has sent `started` or an `error` naming that `source`, at most 5 seconds, and only then starts recording audio. Cameras take about a second to deliver a first frame, so this keeps the first second of video from being black. Send `started` as soon as the first frame is written, and an `error` with `source` for a source you skip, so Record isn't held up.
+
 **Time.** Every `hostTime` and `startHostTime` is seconds on the host clock (mach absolute time), the clock AVFoundation and ScreenCaptureKit already stamp sample buffers with. Report your file's first frame time and Lavdeck lines it up with the audio: it stores each file's offset in `<stem>.take.json` and passes it to later jobs as the file's `offset`. Swift plugins can use `HostClock.now()`.
 
 **Permissions.** Plugins never ask macOS for permissions themselves. List what you need in `permissions`; Lavdeck asks for each one once (when the plugin is switched on, or at the first recording that needs it), whichever plugins need it, and your process runs under Lavdeck's grants. The `start` command's `granted` lists which of your permissions Lavdeck holds right now: skip a source whose permission is missing and report an `error`, rather than calling an API that would prompt.

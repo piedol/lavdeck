@@ -62,6 +62,13 @@ struct PopoverView: View {
                     .help("Stop recording (⌥⌘R)")
                     }
                 }
+            } else if model.isStarting {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.mini)
+                    let on = model.plugins.captureToggles.filter(model.plugins.isOn).map { CaptureSwitch.title($0.source).lowercased() }
+                    Text(on.isEmpty ? "Starting…" : "Starting \(on.joined(separator: " and "))…")
+                        .font(Theme.label).foregroundStyle(Theme.mute)
+                }
             } else if model.isConnected && !model.identifying {
                 Button { model.startIdentify() } label: {
                     HStack(spacing: 4) {
