@@ -412,6 +412,8 @@ private struct TakeDetail: View {
     let onDelete: () -> Void
     /// The transcript scrolls with playback until the user scrolls it themselves.
     @State private var following = true
+    /// The transcript line under the playhead, updated only when it changes (not on every clock tick).
+    @State private var currentSegmentID: TranscriptDocument.Segment.ID?
 
     private var media: [TakeMedia] { TakeMedia.all(in: take) }
     private var videoPlugin: InstalledPlugin? { model.plugins.plugin(producing: "video") }
@@ -439,12 +441,12 @@ private struct TakeDetail: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .onScrollPhaseChange { _, phase in if phase == .interacting { following = false } }
-                .onChange(of: currentSegment?.id) { _, id in
+                .onChange(of: currentSegmentID) { _, id in
                     // Follow playback through long transcripts, unless the user is reading elsewhere.
                     if following, player.isPlaying, let id { withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .center) } }
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    if !following, player.isPlaying, transcript != nil, let id = currentSegment?.id {
+                    if !following, player.isPlaying, transcript != nil, let id = currentSegmentID {
                         Button {
                             following = true
                             withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id, anchor: .center) }
@@ -460,6 +462,7 @@ private struct TakeDetail: View {
         }
         .onAppear(perform: loadDefault)
         .onChange(of: take.id) { following = true; loadDefault() }
+        .onReceive(player.clock.$time) { updateCurrentSegment($0) }
         .onChange(of: media.map(\.id)) { loadDefault() }
     }
 
@@ -473,10 +476,11 @@ private struct TakeDetail: View {
         }
     }
 
-    private var currentSegment: TranscriptDocument.Segment? {
+    private func updateCurrentSegment(_ time: Double) {
         // Only once playback has started, so a freshly loaded take doesn't look like it's playing line one.
-        guard player.media != nil, player.isPlaying || player.currentTime > 0 else { return nil }
-        return transcript?.segments.last { $0.start <= player.currentTime && player.currentTime < $0.end }
+        let id = player.media != nil && (player.isPlaying || time > 0)
+            ? transcript?.segments.last { $0.start <= time && time < $0.end }?.id : nil
+        if id != currentSegmentID { currentSegmentID = id }
     }
 
     // MARK: Header
@@ -578,7 +582,7 @@ private struct TakeDetail: View {
                     .background(Color.black)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             } else if player.media != nil {
-                AudioTransport(player: player)
+                AudioTransport(player: player, clock: player.clock)
             }
             if let error = player.error {
                 Label("Can’t play \((player.media?.file.path as NSString?)?.lastPathComponent ?? "this file"): \(error)", systemImage: "exclamationmark.triangle.fill")
@@ -710,7 +714,7 @@ private struct TakeDetail: View {
                 }
             }
             if let transcript {
-                TranscriptList(transcript: transcript, search: search, current: currentSegment?.id) { segment in
+                TranscriptList(transcript: transcript, search: search, current: currentSegmentID) { segment in
                     following = true
                     if player.media == nil, let best = media.first { player.load(best, of: take) }
                     player.play(from: segment.start)
@@ -794,6 +798,7 @@ private struct FileRow: View {
 /// Play/pause, a scrubber and elapsed / total time, for takes without video.
 private struct AudioTransport: View {
     @ObservedObject var player: TakePlayer
+    @ObservedObject var clock: PlaybackClock
     @State private var scrubbing: Double?
 
     var body: some View {
@@ -804,8 +809,8 @@ private struct AudioTransport: View {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
-            Text(RecordingsView.length(scrubbing ?? player.currentTime)).font(Theme.mono).foregroundStyle(.secondary)
-            Slider(value: Binding(get: { scrubbing ?? min(player.currentTime, total) }, set: { scrubbing = $0 }), in: 0...total) { editing in
+            Text(RecordingsView.length(scrubbing ?? clock.time)).font(Theme.mono).foregroundStyle(.secondary)
+            Slider(value: Binding(get: { scrubbing ?? min(clock.time, total) }, set: { scrubbing = $0 }), in: 0...total) { editing in
                 if !editing, let to = scrubbing { player.seek(to: to); scrubbing = nil }
             }
             .controlSize(.small)
