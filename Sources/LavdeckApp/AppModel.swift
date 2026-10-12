@@ -526,8 +526,34 @@ final class AppModel {
             talkingMic = detector.update(tx1: new.transmitters[1]?.meterLevel, tx2: new.transmitters[2]?.meterLevel)
         }
         knownTransmitters.formUnion(new.receiver.connectedTransmitters)
+        logBattery(new)
         if !isConnected, new.receiver.channelMode != nil { isConnected = true }
         if new.receiver.channelMode == nil, new.lastPush == nil { isConnected = false }
+    }
+
+    /// Battery level and charging flag per transmitter, as last logged.
+    private var loggedBattery: [Int: String] = [:]
+
+    /// Appends a line to ~/Library/Logs/Lavdeck/battery.log whenever a transmitter's battery estimate or
+    /// charging flag changes, so charge and drain can be followed over time.
+    private func logBattery(_ new: MicStatus) {
+        for index in new.receiver.connectedTransmitters {
+            guard let tx = new.transmitters[index], let level = tx.batteryLevel else { continue }
+            let state = "battery \(level)/7 charging \(tx.isCharging == true ? "yes" : "no")"
+            guard loggedBattery[index] != state else { continue }
+            loggedBattery[index] = state
+            let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Lavdeck", isDirectory: true)
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let url = folder.appendingPathComponent("battery.log")
+            let line = "\(Date().formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits))) TX\(index) \(displayName(index)): \(state)\n"
+            if let handle = try? FileHandle(forWritingTo: url) {
+                handle.seekToEndOfFile()
+                handle.write(Data(line.utf8))
+                try? handle.close()
+            } else {
+                try? Data(line.utf8).write(to: url)
+            }
+        }
     }
 
     private func restartButtons() {
