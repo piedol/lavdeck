@@ -43,7 +43,8 @@ enum Snapshot {
             return
         }
         if let i = args.firstIndex(of: "--recordings-window") {
-            showRecordings(model: model, dark: args.contains("--dark"), seconds: Double(args[safe: i + 1] ?? "") ?? 20)
+            showRecordings(model: model, dark: args.contains("--dark"), selectAll: args.contains("--select-all"),
+                           seconds: Double(args[safe: i + 1] ?? "") ?? 20)
             return
         }
         guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return }
@@ -133,9 +134,10 @@ enum Snapshot {
 
     nonisolated(unsafe) private static var window: NSWindow?
 
-    /// `Lavdeck --recordings-window [seconds] [--dark]` opens the Recordings window on its own and prints its
-    /// window number, so it can be captured with `screencapture -l`.
-    private static func showRecordings(model: AppModel, dark: Bool, seconds: Double) {
+    /// `Lavdeck --recordings-window [seconds] [--dark] [--select-all]` opens the Recordings window on its own and
+    /// prints its window number, so it can be captured with `screencapture -l`. `--select-all` focuses the table
+    /// and sends Select All (⌘A), to show the multi-selection pane.
+    private static func showRecordings(model: AppModel, dark: Bool, selectAll: Bool, seconds: Double) {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(500))
             NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -147,12 +149,28 @@ enum Snapshot {
             window = w
             NSApp.activate()
             w.makeKeyAndOrderFront(nil)
+            if selectAll {
+                try? await Task.sleep(for: .seconds(1))
+                // What Edit › Select All (⌘A) sends to the focused table. Sent directly: this dev window isn't
+                // always key when launched from a shell, so the responder chain may not reach it.
+                if let table = w.contentView.flatMap(firstTable) {
+                    w.makeFirstResponder(table)
+                    table.selectAll(nil)
+                }
+                try? await Task.sleep(for: .milliseconds(500))
+            }
             print("window \(w.windowNumber)")
             fflush(stdout)
             try? await Task.sleep(for: .seconds(seconds))
             NSApp.terminate(nil)
         }
     }
+}
+
+@MainActor private func firstTable(in view: NSView) -> NSTableView? {
+    if let table = view as? NSTableView { return table }
+    for sub in view.subviews { if let found = firstTable(in: sub) { return found } }
+    return nil
 }
 
 private extension Array {

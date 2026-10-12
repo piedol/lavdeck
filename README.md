@@ -49,6 +49,7 @@ Lavdeck talks to the receiver directly over USB. Plug it into your Mac and withi
 - **Start and stop anywhere:** the Record button, <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd>, or a tap on either mic's link button (without changing your Mac's volume). The elapsed time sits next to REC, and Stop is always on screen while recording, even if the receiver drops.
 - **Takes survive quitting:** quit Lavdeck mid‑take (or let macOS "Quit & Reopen" it after a permission change) and the take is stopped and saved first.
 - **Recordings window:** every take in one list. Filter, sort and search, including inside transcripts. Play from any line of a transcript, and move a take to the Trash with all its files.
+- **Work on many takes at once:** ⌘-click, ⇧-click a range or ⌘A, then transcribe them (or just the ones without a transcript), copy their transcripts as text, show them in Finder or move them to the Trash. Plugin jobs queue and run one take at a time.
 - **Plugins:** add what happens alongside or after a recording, such as transcripts, screen and camera capture, or an editor, written in any language. See [Plugins](#plugins).
 - **Screen and camera in one click:** with a capture plugin installed, SCREEN and CAMERA buttons on the deck choose what records with the next take, no trip to Settings.
 - **A menu bar icon that tells you what's wrong** before you open anything:
