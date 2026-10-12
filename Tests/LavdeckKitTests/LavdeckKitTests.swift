@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import LavdeckKit
 
@@ -186,4 +187,64 @@ private let sampleRequest = PluginRequest(kind: "action", name: "go",
     do { _ = try await PluginRunner.run(plugin, request: sampleRequest) } catch {
         #expect("\(error)" == "model missing")
     }
+}
+
+// MARK: - Capture plugins (protocol 2)
+
+@Test func captureHostStartsStopsAndCollectsOutputs() async throws {
+    let folder = try scratchFolder()
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let exe = folder.appendingPathComponent("capture")
+    try """
+    #!/bin/sh
+    read -r start
+    case "$start" in *'"type":"start"'*) ;; *) echo '{"type":"error","message":"expected start"}'; exit 1;; esac
+    echo '{"type":"started","source":"screen","startHostTime":100.5}'
+    read -r stop
+    echo '{"type":"output","source":"screen","kind":"video","path":"/tmp/x Screen.mov","startHostTime":100.5}'
+    echo '{"type":"stopped"}'
+    """.write(to: exe, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: exe.path)
+    let manifest = PluginManifest(id: "test.capture", name: "Capture", version: "1", protocol: 2, executable: "capture",
+                                  kind: "capture", capture: CaptureSpec(arguments: []))
+    let plugin = InstalledPlugin(folder: folder, manifest: manifest)
+    #expect(plugin.manifest.isCapture)
+
+    let started = Mutex<[String]>([])
+    let host = CaptureHost { _, event in if event.type == .started { started.withLock { $0.append(event.source ?? "") } } }
+    let problems = host.start([(plugin, [:])], take: CaptureTake(folder: "/tmp", stem: "x"))
+    #expect(problems.isEmpty)
+    try await Task.sleep(for: .milliseconds(300))
+    let result = await host.stop(timeout: 5)
+    #expect(result.problems.isEmpty)
+    #expect(result.outputs == [CaptureOutput(pluginID: "test.capture", path: "/tmp/x Screen.mov", source: "screen",
+                                             kind: "video", startHostTime: 100.5)])
+    #expect(started.withLock { $0 } == ["screen"])
+}
+
+@Test func takeLibraryReadsCapturedMediaWithOffsets() throws {
+    let root = try scratchFolder()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let day = root.appendingPathComponent("2026-10-11")
+    try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
+    for name in ["09.00.00 Stereo.wav", "09.00.00 Screen.mov", "09.00.00 Camera.mov", "09.00.00 PiP.mp4"] {
+        FileManager.default.createFile(atPath: day.appendingPathComponent(name).path, contents: Data())
+    }
+    try TakeMetadata(started: Date(), duration: 10, channelMode: "stereo", format: "wav", mics: [], audioStartHostTime: 50,
+                     media: [.init(file: "09.00.00 Screen.mov", source: "screen", kind: "video", offset: 0.42, plugin: "p")])
+        .write(to: day.appendingPathComponent("09.00.00.take.json"))
+    let take = try #require(TakeLibrary.scan(root: root).first)
+    let screen = try #require(take.descriptor.files.first { $0.source == "screen" })
+    #expect(screen.role == .capture && screen.offset == 0.42)
+    let camera = try #require(take.descriptor.files.first { $0.source == "camera" })
+    #expect(camera.role == .capture && camera.offset == nil)
+    #expect(take.descriptor.files.first { $0.source == "pip" }?.role == .derived)
+    #expect(take.videoFiles.count == 3)
+}
+
+@Test func postRequestsUseThePluginsDeclaredProtocol() {
+    let v1 = InstalledPlugin(folder: URL(fileURLWithPath: "/tmp"),
+                             manifest: PluginManifest(id: "a", name: "A", version: "1", protocol: 1, executable: "x"))
+    let take = TakeDescriptor(id: "d/s", folder: "/tmp", stem: "s")
+    #expect(v1.request(kind: "action", name: "go", take: take, settings: [:]).protocol == 1)
 }

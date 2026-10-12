@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-black">
+  <img alt="macOS 15+" src="https://img.shields.io/badge/macOS-15%2B-black">
   <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-orange">
   <img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue">
 </p>
@@ -62,7 +62,7 @@ It also recovers on its own when you unplug and replug the receiver, follows lig
 
 Lavdeck isn't notarized yet, so for now you build it from source. It takes about a minute.
 
-**Requirements:** macOS 14 or later, Xcode 16 (Swift 6) or later.
+**Requirements:** macOS 15 or later, Xcode 16 (Swift 6) or later.
 
 ```bash
 git clone https://github.com/piedol/lavdeck.git
@@ -71,6 +71,18 @@ scripts/build-app.sh
 cp -R build/Lavdeck.app /Applications/
 open /Applications/Lavdeck.app
 ```
+
+**Keep permissions across rebuilds (optional).** The build is signed ad hoc by default, which changes with every build, so macOS asks again for microphone, camera and screen recording each time you rebuild. To avoid that, create a local signing certificate once; `build-app.sh` uses it automatically:
+
+```bash
+printf '[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=Lavdeck Local Signing\n[ext]\nbasicConstraints=critical,CA:false\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=critical,codeSigning\n' > /tmp/lavdeck-cert.cnf
+/usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/lavdeck.key -out /tmp/lavdeck.pem -days 3650 -config /tmp/lavdeck-cert.cnf
+/usr/bin/openssl pkcs12 -export -inkey /tmp/lavdeck.key -in /tmp/lavdeck.pem -name "Lavdeck Local Signing" -out /tmp/lavdeck.p12 -passout pass:lavdeck
+security import /tmp/lavdeck.p12 -k ~/Library/Keychains/login.keychain-db -P lavdeck -T /usr/bin/codesign
+rm /tmp/lavdeck.key /tmp/lavdeck.p12
+```
+
+Or set `LAVDECK_SIGN_IDENTITY` to any code-signing identity you already have. The certificate stays on your Mac and is only used to sign your own build.
 
 Plug in the receiver (a USB hub must carry data, not just power) and click the icon in the menu bar. macOS asks for microphone access the first time you record.
 
@@ -102,6 +114,7 @@ swift build -c release
 Plugins add steps that run after a take is recorded, never during it, so they can't cost you a recording. A plugin is a folder with a small `plugin.json` and a program in any language. Lavdeck sends it the take as JSON and shows the plugin's progress in the menu bar and the Recordings window. Its settings appear in **Settings › Plugins**, and its actions appear on every take in the Recordings window.
 
 - **Events:** run automatically when a recording finishes, for example to transcribe every take.
+- **Capture:** record alongside the mic, for example the screen and a webcam, with every file lined up to the audio.
 - **Actions:** run on demand on any take, old or new, for example **Generate transcript**.
 - **Shared formats:** a plugin that writes the standard transcript JSON gets search, speaker names and click-to-play in the Recordings window for free.
 

@@ -246,7 +246,7 @@ private struct TakeDetail: View {
             Text("FILES").capsLabel()
             ForEach(take.descriptor.files.filter { $0.role != .metadata }, id: \.path) { file in
                 HStack {
-                    Image(systemName: file.kind == "transcript" ? "doc.text" : "waveform")
+                    Image(systemName: file.kind == "transcript" ? "doc.text" : file.kind == "video" ? "film" : "waveform")
                         .foregroundStyle(.secondary).frame(width: 16)
                     Text((file.path as NSString).lastPathComponent).lineLimit(1).truncationMode(.middle)
                     Spacer()
@@ -306,8 +306,17 @@ private struct TakeDetail: View {
         case .stereo: "Stereo (TX1 left, TX2 right)"
         case .mix: "Mono mix"
         case .track: "TX\(file.mic ?? 0) track"
-        case .derived: file.kind == "transcript" ? "Transcript" : (file.kind ?? "Plugin output")
+        case .derived:
+            file.source == "pip" ? "Picture-in-picture video"
+                : file.kind == "transcript" ? "Transcript" : (file.kind ?? "Plugin output")
         case .metadata: "Metadata"
+        case .capture:
+            switch file.source {
+            case "screen": "Screen recording"
+            case "camera": "Camera"
+            case "system-audio": "System audio"
+            default: "Captured \(file.kind ?? "media")"
+            }
         }
     }
 }

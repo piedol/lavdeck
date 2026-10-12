@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Lavdeck",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v15)],
     products: [
         .library(name: "LavdeckKit", targets: ["LavdeckKit"]),
         .library(name: "LavdeckPluginKit", targets: ["LavdeckPluginKit"]),

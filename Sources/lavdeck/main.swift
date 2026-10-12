@@ -215,9 +215,8 @@ case "run":
         fail("no take \(args[3])")
     }
     let isEvent = plugin.manifest.events?.contains(args[2]) == true
-    let request = PluginRequest(kind: isEvent ? "event" : "action", name: args[2], take: take.descriptor,
-                                settings: store.settings(for: plugin), outputDirectory: take.descriptor.folder,
-                                pluginDirectory: plugin.folder.path)
+    let request = plugin.request(kind: isEvent ? "event" : "action", name: args[2], take: take.descriptor,
+                                 settings: store.settings(for: plugin))
     let started = Date()
     do {
         let result = try await PluginRunner.run(plugin, request: request) { message in

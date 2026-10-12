@@ -11,6 +11,7 @@ A plugin is a folder holding a `plugin.json` manifest and an executable. You can
 - [Messages](#messages)
 - [Writing output](#writing-output)
 - [Conventions](#conventions)
+- [Capture plugins (protocol 2)](#capture-plugins-protocol-2)
 - [Helpers](#helpers)
 - [Trust](#trust)
 
@@ -65,7 +66,10 @@ Only one Lavdeck process can talk to the receiver at a time, but `takes`, `plugi
 |---|---|---|
 | `id` | yes | Reverse-DNS identifier. Lavdeck keys enabled state and settings by it. |
 | `name`, `version` | yes | Shown in Settings. |
-| `protocol` | yes | Protocol version the plugin speaks. Currently `1`. Lavdeck lists a plugin with a different version as a problem and won't run it. |
+| `protocol` | yes | Protocol version the plugin speaks: `1`, or `2` for capture plugins. Lavdeck sends post jobs in the version you declare and lists a plugin with a version it doesn't know as a problem. |
+| `kind` | no | `post` (the default), `capture` or `app`. See [Capture plugins](#capture-plugins-protocol-2). |
+| `permissions` | no | System permissions the plugin relies on, shown next to its switch: `screen-recording`, `camera`, `microphone`, `network`. |
+| `minAppVersion` | no | Oldest Lavdeck version the plugin works with. |
 | `executable` | yes | Path relative to the plugin folder. It must be executable (`chmod +x`). |
 | `arguments` | no | Extra command-line arguments. |
 | `events` | no | Events that run the plugin automatically while it is switched on. |
@@ -126,6 +130,7 @@ Lavdeck writes a single JSON object to standard input, then closes it:
 | `track` | One mic on its own, with `mic` set to 1 or 2. Present when split tracks are on, or when only one mic was armed. |
 | `derived` | Anything a plugin wrote, with `kind` set (`transcript`, `audio`, …). |
 | `metadata` | Lavdeck's `<stem>.take.json`. |
+| `capture` | Recorded by a capture plugin alongside the audio, with `kind` (`video` or `audio`), `source` (`screen`, `camera`, `system-audio`) and `offset`: seconds after the take's first audio sample that the file's first frame happened. |
 
 **`take.speakers`** lists the mics that were armed, with the names the user gave them. A speaker has a `file` when that mic has its own track. When two speakers both have files, the take is a **two-speaker take**: each person's voice is on its own file, with some bleed from the other mic.
 
@@ -185,6 +190,35 @@ Write next to the take, in `outputDirectory`, and name every file with the take'
 `words` is optional. Speaker ids match `take.speakers[].id`; use `speaker` for a take with no named mics. A transcription plugin can also write `.md`, `.srt` and `.vtt` siblings.
 
 **Audio.** Derived audio keeps the source's sample rate and format, and should say what was done to it in the file name.
+
+## Capture plugins (protocol 2)
+
+A capture plugin records something alongside Lavdeck's audio, such as the screen or a webcam. Declare `"protocol": 2`, `"kind": "capture"` and a `capture` section:
+
+```json
+"capture": { "arguments": ["--capture"], "sources": ["screen", "camera"] },
+"permissions": ["screen-recording", "camera"]
+```
+
+When a recording starts, Lavdeck launches the capture executable (the manifest's `executable` unless `capture.executable` names another) with `capture.arguments`, and the two talk in JSON lines:
+
+| Direction | Line |
+|---|---|
+| Lavdeck → plugin | `{"type":"start","protocol":2,"take":{"folder":"…","stem":"14.02.11"},"settings":{…},"pluginDirectory":"…","hostTime":12345.678}` |
+| plugin → Lavdeck | `{"type":"started","source":"screen","startHostTime":12345.71}` when the first frame is written |
+| Lavdeck → plugin | `{"type":"stop"}` when the recording stops, then standard input closes |
+| plugin → Lavdeck | `{"type":"output","source":"screen","kind":"video","path":"…/14.02.11 Screen.mov","startHostTime":12345.71}` for each file |
+| plugin → Lavdeck | `{"type":"stopped"}`, then exit |
+
+`log` and `error` lines work as they do for post plugins. Lavdeck waits up to 30 seconds after `stop` for files to finish writing.
+
+**Time.** Every `hostTime` and `startHostTime` is seconds on the host clock (mach absolute time), the clock AVFoundation and ScreenCaptureKit already stamp sample buffers with. Report your file's first frame time and Lavdeck lines it up with the audio: it stores each file's offset in `<stem>.take.json` and passes it to later jobs as the file's `offset`. Swift plugins can use `HostClock.now()`.
+
+**Permissions.** The capture process runs as Lavdeck's child, so macOS asks for screen and camera access on Lavdeck's behalf the first time, and the grant applies to Lavdeck.
+
+**Files.** Name files `<stem> <Source>.<ext>`, for example `14.02.11 Screen.mov` and `14.02.11 Camera.mov`. A capture plugin can also handle post events with its main executable, for example to compose a picture-in-picture video after the take.
+
+The `LavdeckPluginKit` Swift library has the types: `CaptureCommand.lines()`, `CaptureEvent.started(…).emit()`, `CaptureSpec`, `HostClock`.
 
 ## Helpers
 

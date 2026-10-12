@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreMedia
 import Foundation
 
 public enum RecordingFormat: String, CaseIterable, Sendable {
@@ -38,6 +39,9 @@ public final class MicRecorder: NSObject, AVCaptureFileOutputRecordingDelegate, 
     public var onFinish: (@Sendable (URL, Error?) -> Void)?
     public private(set) var isRecording = false
     public private(set) var currentURL: URL?
+    /// Host-clock seconds of the current file's first audio sample, once recording has started. Capture
+    /// plugins' files are lined up against this.
+    public private(set) var startHostTime: Double?
 
     private let session = AVCaptureSession()
     private let output = AVCaptureAudioFileOutput()
@@ -77,6 +81,7 @@ public final class MicRecorder: NSObject, AVCaptureFileOutputRecordingDelegate, 
         output.audioSettings = format.settings
         session.commitConfiguration()
         session.startRunning()
+        startHostTime = nil
         output.startRecording(to: url, outputFileType: format.fileType, recordingDelegate: self)
         currentURL = url
         isRecording = true
@@ -90,6 +95,14 @@ public final class MicRecorder: NSObject, AVCaptureFileOutputRecordingDelegate, 
     /// Current average power per channel in dBFS (left, right), while recording.
     public func channelLevels() -> [Float] {
         output.connections.first?.audioChannels.map(\.averagePowerLevel) ?? []
+    }
+
+    public func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, startPTS: CMTime,
+                           from connections: [AVCaptureConnection]) {
+        let host = CMClockGetHostTimeClock()
+        let clock = session.synchronizationClock ?? host
+        let converted = CMSyncConvertTime(startPTS, from: clock, to: host)
+        startHostTime = converted.isValid ? converted.seconds : nil
     }
 
     public func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo url: URL,
