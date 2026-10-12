@@ -196,7 +196,7 @@ Write next to the take, in `outputDirectory`, and name every file with the take'
 A capture plugin records something alongside Lavdeck's audio, such as the screen or a webcam. Declare `"protocol": 2`, `"kind": "capture"` and a `capture` section:
 
 ```json
-"capture": { "arguments": ["--capture"], "sources": ["screen", "camera"] },
+"capture": { "arguments": ["--capture"], "sources": ["screen", "camera"], "ownPermissions": true },
 "permissions": ["screen-recording", "camera"]
 ```
 
@@ -214,7 +214,7 @@ When a recording starts, Lavdeck launches the capture executable (the manifest's
 
 **Time.** Every `hostTime` and `startHostTime` is seconds on the host clock (mach absolute time), the clock AVFoundation and ScreenCaptureKit already stamp sample buffers with. Report your file's first frame time and Lavdeck lines it up with the audio: it stores each file's offset in `<stem>.take.json` and passes it to later jobs as the file's `offset`. Swift plugins can use `HostClock.now()`.
 
-**Permissions.** The capture process runs as Lavdeck's child, so macOS asks for screen and camera access on Lavdeck's behalf the first time, and the grant applies to Lavdeck.
+**Permissions.** macOS checks screen recording and camera access against the process that does the capturing. Ship the capture executable inside a signed `.app` bundle with its own bundle identifier (and an `NSCameraUsageDescription` if it uses a camera), and set `"ownPermissions": true` in `capture`: Lavdeck then launches it as its own app, macOS asks for access by the plugin's name, and the grant is remembered as long as the bundle keeps the same signing identity. Without `ownPermissions` the process runs as Lavdeck's child, which works for capture that needs no special permission.
 
 **Files.** Name files `<stem> <Source>.<ext>`, for example `14.02.11 Screen.mov` and `14.02.11 Camera.mov`. A capture plugin can also handle post events with its main executable, for example to compose a picture-in-picture video after the take.
 
