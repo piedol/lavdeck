@@ -100,31 +100,43 @@ struct LEDMeter: View {
     }
 }
 
-/// Whether a transmitter is charging. The Mobile RX relays the charging flag live but not the battery
-/// level (its level field stays at a fixed placeholder whatever the real charge), so no level is shown.
+/// Charging state and the receiver's battery code for a transmitter. The Mobile RX reports battery as a
+/// coarse code (bits 10-12 of the transmitter status), not a percentage. Code 1 has been confirmed as
+/// "high" (DJI Mimo showed both mics at 100% while it read 1); other codes aren't mapped yet, so they're
+/// shown as the raw code and logged when they change.
 struct ChargeState: View {
     let charging: Bool?
+    let code: Int?
+
+    static func label(for code: Int?) -> String? {
+        switch code {
+        case 1?: "High"
+        case let c?: "Level \(c)"
+        case nil: nil
+        }
+    }
 
     var body: some View {
         HStack(spacing: 3) {
-            switch charging {
-            case true?:
+            if charging == true {
                 Image(systemName: "bolt.fill").font(.system(size: 9, weight: .bold))
                 Text("Charging")
-            case false?:
-                Image(systemName: "battery.75percent").font(.system(size: 10, weight: .medium))
-                Text("On battery")
-            case nil:
+            } else if let label = Self.label(for: code), charging != nil {
+                Image(systemName: code == 1 ? "battery.100percent" : "battery.50percent").font(.system(size: 10, weight: .medium))
+                Text(label)
+            } else {
                 Text("—")
             }
         }
         .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(charging == true ? Theme.green : Theme.mute)
         .frame(height: 12)
-        .help("The receiver reports whether this mic is charging, but not its battery level. DJI Mimo reads the level from the mic directly over Bluetooth.")
+        .help(code == 1 || code == nil
+              ? "Battery as the receiver reports it: a coarse level, not a percentage."
+              : "The receiver reports battery code \(code!), which isn’t mapped to a level yet. Changes are logged to ~/Library/Logs/Lavdeck/battery.log.")
         .accessibilityElement()
-        .accessibilityLabel("Charging")
-        .accessibilityValue(charging == true ? "charging" : charging == false ? "on battery" : "unknown")
+        .accessibilityLabel("Battery")
+        .accessibilityValue(charging == true ? "charging" : Self.label(for: code) ?? "unknown")
     }
 }
 

@@ -442,7 +442,7 @@ final class AppModel {
         s.receiver.noiseCancelling = true
         s.receiver.noiseCancellingLevel = 1
         s.receiver.connectedTransmitters = [1, 2]
-        for (index, id, fw, meter, battery, charging) in [(1, "a1b2c3", "02.03.17.00", 58, 5, false), (2, "d4e5f6", "02.03.17.00", 41, 3, !recording)] {
+        for (index, id, fw, meter, battery, charging) in [(1, "a1b2c3", "02.03.17.00", 58, 1, false), (2, "d4e5f6", "02.03.17.00", 41, 1, !recording)] {
             var tx = TransmitterStatus(index: index)
             tx.identity.productName = "DJI Mic Mini"
             tx.identity.bluetoothID = id
@@ -559,7 +559,7 @@ final class AppModel {
     private func logBattery(_ new: MicStatus) {
         for index in new.receiver.connectedTransmitters {
             guard let tx = new.transmitters[index], let level = tx.batteryLevel else { continue }
-            let state = "charging \(tx.isCharging == true ? "yes" : "no") (raw \(String(format: "%08x", tx.rawFlags ?? 0)), level field \(level))"
+            let state = "battery code \(level) (\(ChargeState.label(for: level) ?? "?")), charging \(tx.isCharging == true ? "yes" : "no"), raw \(String(format: "%08x", tx.rawFlags ?? 0))"
             guard loggedBattery[index] != state else { continue }
             loggedBattery[index] = state
             let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Lavdeck", isDirectory: true)

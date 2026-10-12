@@ -98,7 +98,7 @@ Plug in the receiver (a USB hub must carry data, not just power) and click the i
 | Switch mono / stereo | Click **MONO** or **STEREO** in the popover |
 | Change gain | Drag the fader or click a value |
 | Tell the mics apart | **Which mic is which?**, then talk into one; click a strip's name to label it |
-| See if a mic is charging | Under each meter: ⚡ Charging or On battery |
+| See if a mic is charging or full | Under each meter: ⚡ Charging, or the receiver's battery level (High) |
 | Record only one mic | Click **ARMED** on the other strip to turn it **OFF** |
 | Start / stop recording | **Record**, <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd>, or tap a mic's link button |
 | Find your takes | Click the format label in the popover to open **Recordings**, or look in `~/Recordings/Lavdeck/<date>/` |
@@ -143,7 +143,7 @@ Start from [`Examples/plugins/take-info`](Examples/plugins/take-info), which inc
 
 **Known limits**
 
-- **No battery level.** The Mobile RX passes on whether each mic is charging, but not how full it is: its battery field stays at the same placeholder whether a mic is empty or full. DJI Mimo reads the level from the mic directly over Bluetooth. A mic that was just in use can take a few minutes to start charging.
+- **Coarse battery level only.** The Mobile RX passes on whether each mic is charging and a coarse battery code, not a percentage. Only the "high" code is mapped so far; other codes show as "Level N" and are logged to `~/Library/Logs/Lavdeck/battery.log`. A mic that was just in use can take a few minutes to start charging.
 - In mono the receiver mixes both mics, so each strip shows the mixed level (labelled **mono mix**). Switch to stereo to see each mic's own level.
 - The receiver accepts a per‑mic mute but doesn't act on it, so Lavdeck records one mic by keeping only its channel instead.
 - The Mac can't tell which mic's button was tapped; either one toggles recording.
