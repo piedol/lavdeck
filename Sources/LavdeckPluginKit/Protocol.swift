@@ -114,11 +114,20 @@ public struct PluginAction: Codable, Sendable, Identifiable, Equatable {
     public var id: String
     public var title: String
     public var summary: String?
+    /// What a take needs for this action to make sense; Lavdeck only offers it on takes that have all of it.
+    /// `video` (a captured screen or camera recording), `screen`, `camera`, `transcript`.
+    public var requires: [String]?
 
-    public init(id: String, title: String, summary: String? = nil) {
+    public init(id: String, title: String, summary: String? = nil, requires: [String]? = nil) {
         self.id = id
         self.title = title
         self.summary = summary
+        self.requires = requires
+    }
+
+    /// True when `take` has everything in `requires`.
+    public func applies(to take: TakeDescriptor) -> Bool {
+        (requires ?? []).allSatisfy { take.has($0) }
     }
 }
 
@@ -218,6 +227,16 @@ public struct TakeDescriptor: Codable, Sendable, Equatable, Identifiable {
 
     /// True when each speaker has their own mono track (stereo with split tracks, both mics armed).
     public var isTwoSpeaker: Bool { speakers.filter { $0.file != nil }.count >= 2 }
+
+    /// Whether the take has a kind of content, for ``PluginAction/requires``.
+    public func has(_ requirement: String) -> Bool {
+        switch requirement {
+        case "video": files.contains { $0.role == .capture && $0.kind == "video" }
+        case "screen", "camera": files.contains { $0.role == .capture && $0.source == requirement }
+        case "transcript": files.contains { $0.kind == "transcript" && $0.path.hasSuffix(".transcript.json") }
+        default: true
+        }
+    }
 
     /// The best single file holding everyone: stereo, then mix, then the first track.
     public var mainAudio: TakeFile? {

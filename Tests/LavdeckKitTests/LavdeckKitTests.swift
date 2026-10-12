@@ -258,3 +258,19 @@ private let sampleRequest = PluginRequest(kind: "action", name: "go",
     let items = URLComponents(url: spec.url(for: spaced)!, resolvingAgainstBaseURL: false)?.queryItems
     #expect(items?.first { $0.name == "folder" }?.value == "/Users/me/My Takes & Co")
 }
+
+@Test func actionsApplyOnlyToTakesWithWhatTheyRequire() {
+    let remake = PluginAction(id: "pip", title: "Remake video", requires: ["video"])
+    let anything = PluginAction(id: "info", title: "Take info")
+    let audio = TakeDescriptor(id: "d/1", folder: "/d", stem: "1", files: [TakeFile(path: "/d/1 TX1.wav", role: .track, mic: 1)])
+    var camera = audio
+    camera.files.append(TakeFile(path: "/d/1 Camera.mov", role: .capture, kind: "video", source: "camera"))
+    // A finished video without its raw recordings can't be remade.
+    var finishedOnly = audio
+    finishedOnly.files.append(TakeFile(path: "/d/1 PiP.mp4", role: .derived, kind: "video", source: "pip"))
+    #expect(!remake.applies(to: audio))
+    #expect(remake.applies(to: camera))
+    #expect(!remake.applies(to: finishedOnly))
+    #expect(anything.applies(to: audio))
+    #expect(camera.has("camera") && !camera.has("screen"))
+}

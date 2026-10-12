@@ -74,7 +74,7 @@ Only one Lavdeck process can talk to the receiver at a time, but `takes`, `plugi
 | `executable` | yes | Path relative to the plugin folder. It must be executable (`chmod +x`). |
 | `arguments` | no | Extra command-line arguments. |
 | `events` | no | Events that run the plugin automatically while it is switched on. |
-| `actions` | no | Commands a user can run on any take from the Recordings window. |
+| `actions` | no | Commands a user can run on takes from the Recordings window. Each has `id`, `title`, an optional `summary` (tooltip) and optional `requires`: what a take must have for the action to make sense, any of `video` (a captured screen or camera recording), `screen`, `camera`, `transcript`. Lavdeck only offers an action on takes that have all of it, and with several takes selected runs it on the ones that do ("Remake video · 2 of 5"). |
 | `settings` | no | Lavdeck draws these in Settings › Plugins and sends the values with every request. Types are `bool`, `string`, `number`, `choice` (with `options`) and `path` (a text field plus a folder or file picker). |
 | `produces` | no | Output kinds. A plugin that produces `transcript` becomes the one behind **Generate transcript** in the Recordings window. |
 
@@ -83,9 +83,9 @@ Only one Lavdeck process can talk to the receiver at a time, but `takes`, `plugi
 There are two ways a job starts:
 
 - **Event.** Protocol 1 has one event, `take.finished`. It fires when a recording has stopped and every file is in place: the stereo or mono file, split tracks, single-mic extracts and the take's metadata.
-- **Action.** A user picks one of the plugin's `actions` on a take in the Recordings window. Actions work on any take, old or new, so make them safe to run twice. Overwriting your own earlier output is the expected behaviour.
+- **Action.** A user picks one of the plugin's `actions` on a take in the Recordings window. Actions work on any take that meets their `requires`, old or new, so make them safe to run twice. Overwriting your own earlier output is the expected behaviour.
 
-Each job is a separate process. Lavdeck shows progress in the menu bar popover and the Recordings window, and lets the user cancel. Cancelling sends `SIGTERM`.
+Each job is a separate process. A plugin runs one job at a time: more jobs for it (a batch from a multi-selection, or a take finishing while another is still being processed) queue and start in order. Lavdeck shows progress in the menu bar popover and the Recordings window, and lets the user cancel. Cancelling sends `SIGTERM`. When an event job fails, the popover says so until it's dismissed or the next recording starts; a failed action shows only on its take in the Recordings window.
 
 ## The request
 
