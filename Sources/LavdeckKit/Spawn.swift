@@ -1,11 +1,8 @@
 import Darwin
 import Foundation
 
-/// A child process started with posix_spawn, with pipes on stdin, stdout and stderr.
-///
-/// `disclaimResponsibility` starts the child as responsible for itself, so macOS asks for (and remembers)
-/// privacy permissions such as screen recording against the child's own signed bundle instead of
-/// Lavdeck's. Terminal, iTerm2 and Chromium do the same for their helpers.
+/// A child process started with posix_spawn, with pipes on stdin, stdout and stderr. It runs under
+/// Lavdeck's privacy permissions, so plugins share Lavdeck's grants instead of prompting on their own.
 final class SpawnedProcess: @unchecked Sendable {
     let pid: pid_t
     let stdin: FileHandle
@@ -23,15 +20,13 @@ final class SpawnedProcess: @unchecked Sendable {
         }
     }
 
-    init(executable: URL, arguments: [String], environment: [String: String], directory: URL,
-         disclaimResponsibility: Bool) throws {
+    init(executable: URL, arguments: [String], environment: [String: String], directory: URL) throws {
         let input = Pipe(), output = Pipe(), errors = Pipe()
         var attributes: posix_spawnattr_t?
         posix_spawnattr_init(&attributes)
         defer { posix_spawnattr_destroy(&attributes) }
         // Only fds 0-2 reach the child.
         posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_CLOEXEC_DEFAULT))
-        if disclaimResponsibility { Self.disclaim(&attributes) }
 
         var actions: posix_spawn_file_actions_t?
         posix_spawn_file_actions_init(&actions)
@@ -91,13 +86,5 @@ final class SpawnedProcess: @unchecked Sendable {
         }
         exitSource.cancel()
         handlers.forEach { $0(code) }
-    }
-
-    private typealias DisclaimFunction = @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
-
-    private static func disclaim(_ attributes: UnsafeMutablePointer<posix_spawnattr_t?>) {
-        // Private but long-stable libsystem call; skipped if it ever disappears.
-        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim") else { return }
-        _ = unsafeBitCast(symbol, to: DisclaimFunction.self)(attributes, 1)
     }
 }

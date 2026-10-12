@@ -248,3 +248,13 @@ private let sampleRequest = PluginRequest(kind: "action", name: "go",
     let take = TakeDescriptor(id: "d/s", folder: "/tmp", stem: "s")
     #expect(v1.request(kind: "action", name: "go", take: take, settings: [:]).protocol == 1)
 }
+
+@Test func appPluginsFillTheOpenTakeURL() {
+    let spec = AppSpec(bundle: "x.app", openTake: "studio://open?folder={folder}&stem={stem}")
+    let take = TakeDescriptor(id: "2026-10-11/20.11.43", folder: "/Users/me/Recordings/Lavdeck/2026-10-11", stem: "20.11.43")
+    let url = spec.url(for: take)
+    #expect(url?.absoluteString == "studio://open?folder=/Users/me/Recordings/Lavdeck/2026-10-11&stem=20.11.43")
+    let spaced = TakeDescriptor(id: "a/b", folder: "/Users/me/My Takes & Co", stem: "b")
+    let items = URLComponents(url: spec.url(for: spaced)!, resolvingAgainstBaseURL: false)?.queryItems
+    #expect(items?.first { $0.name == "folder" }?.value == "/Users/me/My Takes & Co")
+}

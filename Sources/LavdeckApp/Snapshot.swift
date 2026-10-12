@@ -1,3 +1,5 @@
+import CoreGraphics
+import AVFoundation
 import AppKit
 import SwiftUI
 
@@ -7,6 +9,19 @@ import SwiftUI
 enum Snapshot {
     static func runIfRequested(model: AppModel) {
         let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--permission-report"), i + 1 < args.count {
+            // Development aid: write what this process sees for each permission, then quit.
+            let report: [String: Any] = [
+                "screenPreflight": CGPreflightScreenCaptureAccess(),
+                "camera": AVCaptureDevice.authorizationStatus(for: .video).rawValue,
+                "microphone": AVCaptureDevice.authorizationStatus(for: .audio).rawValue,
+                "pid": getpid(),
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: report, options: .prettyPrinted) {
+                try? data.write(to: URL(fileURLWithPath: args[i + 1]))
+            }
+            exit(0)
+        }
         if let i = args.firstIndex(of: "--recordings-window") {
             showRecordings(model: model, dark: args.contains("--dark"), seconds: Double(args[safe: i + 1] ?? "") ?? 20)
             return

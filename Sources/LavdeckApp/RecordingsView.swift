@@ -224,6 +224,13 @@ private struct TakeDetail: View {
                     Label(player.isPlaying ? "Pause" : "Play", systemImage: player.isPlaying ? "pause.fill" : "play.fill")
                 }
                 .keyboardShortcut(.space, modifiers: [])
+                ForEach(model.plugins.appPlugins) { plugin in
+                    Button {
+                        model.plugins.open(take, in: plugin)
+                    } label: {
+                        Label(plugin.manifest.app?.actionTitle ?? "Open in \(plugin.manifest.name)", systemImage: "film.stack")
+                    }
+                }
                 Menu {
                     Button("Show in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting(take.allURLs)

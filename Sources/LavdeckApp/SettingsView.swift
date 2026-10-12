@@ -60,20 +60,6 @@ private struct GeneralSettings: View {
 private struct PluginSettings: View {
     @Environment(AppModel.self) private var model
 
-    static func permissionsLine(_ permissions: [String]?) -> String? {
-        let names = (permissions ?? []).map { p -> String in
-            switch p {
-            case "screen-recording": "screen recording"
-            case "camera": "camera"
-            case "microphone": "microphone"
-            case "network": "network access"
-            default: p
-            }
-        }
-        guard !names.isEmpty else { return nil }
-        return "Needs \(ListFormatter.localizedString(byJoining: names)) permission for Lavdeck"
-    }
-
     var body: some View {
         let host = model.plugins
         Form {
@@ -85,15 +71,18 @@ private struct PluginSettings: View {
             }
             ForEach(host.plugins) { plugin in
                 Section {
-                    Toggle(isOn: Binding(get: { host.isEnabled(plugin) }, set: { host.setEnabled(plugin, $0) })) {
+                    Toggle(isOn: Binding(get: { host.isEnabled(plugin) }, set: { on in
+                        host.setEnabled(plugin, on)
+                        if on, let needed = plugin.manifest.permissions { Task { await model.permissions.request(needed) } }
+                    })) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(plugin.manifest.name).font(.headline)
                             if let summary = plugin.manifest.summary { Text(summary).font(.callout).foregroundStyle(.secondary) }
-                            if let needs = Self.permissionsLine(plugin.manifest.permissions) {
-                                Label(needs, systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary)
-                            }
                             Text("\(plugin.manifest.version) · \(plugin.id)").font(.caption).foregroundStyle(.tertiary)
                         }
+                    }
+                    if let needed = plugin.manifest.permissions, !needed.isEmpty {
+                        PermissionRow(permissions: needed)
                     }
                     if host.isEnabled(plugin) {
                         ForEach(plugin.manifest.settings ?? []) { setting in
@@ -118,7 +107,7 @@ private struct PluginSettings: View {
                     Button("Reload") { host.reload() }
                 }
             } footer: {
-                Text("Plugins run as separate programs with your permissions. Only install plugins you trust.")
+                Text("Plugins run as separate programs with your permissions and Lavdeck’s. Lavdeck asks macOS for each permission once, whichever plugins need it. Only install plugins you trust.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -185,6 +174,38 @@ private struct SettingRow: View {
         panel.directoryURL = URL(fileURLWithPath: (current as NSString).expandingTildeInPath).deletingLastPathComponent()
         if panel.runModal() == .OK, let url = panel.url {
             model.plugins.setValue(.string(url.path), setting, for: plugin)
+        }
+    }
+}
+
+/// The permissions a plugin relies on, with Lavdeck's current grant for each.
+private struct PermissionRow: View {
+    @Environment(AppModel.self) private var model
+    let permissions: [String]
+
+    var body: some View {
+        let center = model.permissions
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            Label("Uses Lavdeck’s", systemImage: "lock.shield").font(.callout).foregroundStyle(.secondary)
+            ForEach(permissions, id: \.self) { permission in
+                let state = center.state(permission)
+                HStack(spacing: 4) {
+                    Image(systemName: state == .granted ? "checkmark.circle.fill" : "exclamationmark.circle")
+                        .foregroundStyle(state == .granted ? Color.green : Color.orange)
+                    Text(PermissionCenter.name(permission)).font(.callout)
+                }
+                .help(state == .granted ? "Allowed" : "Not allowed yet")
+            }
+            Spacer()
+            if permissions.contains(where: { center.state($0) != .granted }) {
+                Button("Allow…") {
+                    Task {
+                        await center.request(permissions)
+                        if let blocked = permissions.first(where: { center.state($0) == .denied }) { center.openSettings(for: blocked) }
+                    }
+                }
+                .controlSize(.small)
+            }
         }
     }
 }

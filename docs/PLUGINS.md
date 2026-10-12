@@ -12,6 +12,7 @@ A plugin is a folder holding a `plugin.json` manifest and an executable. You can
 - [Writing output](#writing-output)
 - [Conventions](#conventions)
 - [Capture plugins (protocol 2)](#capture-plugins-protocol-2)
+- [App plugins](#app-plugins)
 - [Helpers](#helpers)
 - [Trust](#trust)
 
@@ -67,7 +68,7 @@ Only one Lavdeck process can talk to the receiver at a time, but `takes`, `plugi
 | `id` | yes | Reverse-DNS identifier. Lavdeck keys enabled state and settings by it. |
 | `name`, `version` | yes | Shown in Settings. |
 | `protocol` | yes | Protocol version the plugin speaks: `1`, or `2` for capture plugins. Lavdeck sends post jobs in the version you declare and lists a plugin with a version it doesn't know as a problem. |
-| `kind` | no | `post` (the default), `capture` or `app`. See [Capture plugins](#capture-plugins-protocol-2). |
+| `kind` | no | `post` (the default), `capture` or `app`. See [Capture plugins](#capture-plugins-protocol-2) and [App plugins](#app-plugins). |
 | `permissions` | no | System permissions the plugin relies on, shown next to its switch: `screen-recording`, `camera`, `microphone`, `network`. |
 | `minAppVersion` | no | Oldest Lavdeck version the plugin works with. |
 | `executable` | yes | Path relative to the plugin folder. It must be executable (`chmod +x`). |
@@ -196,7 +197,7 @@ Write next to the take, in `outputDirectory`, and name every file with the take'
 A capture plugin records something alongside Lavdeck's audio, such as the screen or a webcam. Declare `"protocol": 2`, `"kind": "capture"` and a `capture` section:
 
 ```json
-"capture": { "arguments": ["--capture"], "sources": ["screen", "camera"], "ownPermissions": true },
+"capture": { "arguments": ["--capture"], "sources": ["screen", "camera"] },
 "permissions": ["screen-recording", "camera"]
 ```
 
@@ -204,7 +205,7 @@ When a recording starts, Lavdeck launches the capture executable (the manifest's
 
 | Direction | Line |
 |---|---|
-| Lavdeck → plugin | `{"type":"start","protocol":2,"take":{"folder":"…","stem":"14.02.11"},"settings":{…},"pluginDirectory":"…","hostTime":12345.678}` |
+| Lavdeck → plugin | `{"type":"start","protocol":2,"take":{"folder":"…","stem":"14.02.11"},"settings":{…},"pluginDirectory":"…","hostTime":12345.678,"granted":["camera"]}` |
 | plugin → Lavdeck | `{"type":"started","source":"screen","startHostTime":12345.71}` when the first frame is written |
 | Lavdeck → plugin | `{"type":"stop"}` when the recording stops, then standard input closes |
 | plugin → Lavdeck | `{"type":"output","source":"screen","kind":"video","path":"…/14.02.11 Screen.mov","startHostTime":12345.71}` for each file |
@@ -214,11 +215,26 @@ When a recording starts, Lavdeck launches the capture executable (the manifest's
 
 **Time.** Every `hostTime` and `startHostTime` is seconds on the host clock (mach absolute time), the clock AVFoundation and ScreenCaptureKit already stamp sample buffers with. Report your file's first frame time and Lavdeck lines it up with the audio: it stores each file's offset in `<stem>.take.json` and passes it to later jobs as the file's `offset`. Swift plugins can use `HostClock.now()`.
 
-**Permissions.** macOS checks screen recording and camera access against the process that does the capturing. Ship the capture executable inside a signed `.app` bundle with its own bundle identifier (and an `NSCameraUsageDescription` if it uses a camera), and set `"ownPermissions": true` in `capture`: Lavdeck then launches it as its own app, macOS asks for access by the plugin's name, and the grant is remembered as long as the bundle keeps the same signing identity. Without `ownPermissions` the process runs as Lavdeck's child, which works for capture that needs no special permission.
+**Permissions.** Plugins never ask macOS for permissions themselves. List what you need in `permissions`; Lavdeck asks for each one once (when the plugin is switched on, or at the first recording that needs it), whichever plugins need it, and your process runs under Lavdeck's grants. The `start` command's `granted` lists which of your permissions Lavdeck holds right now: skip a source whose permission is missing and report an `error`, rather than calling an API that would prompt.
 
 **Files.** Name files `<stem> <Source>.<ext>`, for example `14.02.11 Screen.mov` and `14.02.11 Camera.mov`. A capture plugin can also handle post events with its main executable, for example to compose a picture-in-picture video after the take.
 
 The `LavdeckPluginKit` Swift library has the types: `CaptureCommand.lines()`, `CaptureEvent.started(…).emit()`, `CaptureSpec`, `HostClock`.
+
+## App plugins
+
+An app plugin ships a companion app with its own windows, such as an editor. Lavdeck shows a button on every take in the Recordings window that opens the take in it:
+
+```json
+"kind": "app",
+"app": {
+  "bundle": "build/My Editor.app",
+  "openTake": "my-editor://open?folder={folder}&stem={stem}",
+  "actionTitle": "Open in My Editor"
+}
+```
+
+Lavdeck fills `{folder}`, `{stem}` and `{id}` (percent-encoded) and opens the URL with your bundle, so register the URL scheme in the app's `Info.plist`. The app reads the take's files and `<stem>.take.json` directly; write anything it produces next to the take with the stem as a prefix, as other plugins do.
 
 ## Helpers
 

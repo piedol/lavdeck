@@ -44,7 +44,9 @@ public final class CaptureHost: @unchecked Sendable {
 
     /// Starts each plugin's capture process and sends it `start`. Plugins that fail to launch are
     /// reported and skipped; the recording goes ahead without them.
-    public func start(_ plugins: [(plugin: InstalledPlugin, settings: [String: JSONValue])], take: CaptureTake) -> [Problem] {
+    /// `granted` lists the permissions Lavdeck holds; each plugin is told which of its own are granted.
+    public func start(_ plugins: [(plugin: InstalledPlugin, settings: [String: JSONValue])], take: CaptureTake,
+                      granted: Set<String> = []) -> [Problem] {
         var problems: [Problem] = []
         let hostTime = HostClock.now()
         for (plugin, settings) in plugins where plugin.manifest.isCapture {
@@ -56,8 +58,7 @@ public final class CaptureHost: @unchecked Sendable {
             let process: SpawnedProcess
             do {
                 process = try SpawnedProcess(executable: plugin.folder.appendingPathComponent(spec.executable ?? plugin.manifest.executable),
-                                             arguments: spec.arguments ?? [], environment: env, directory: plugin.folder,
-                                             disclaimResponsibility: spec.ownPermissions == true)
+                                             arguments: spec.arguments ?? [], environment: env, directory: plugin.folder)
             } catch {
                 problems.append(Problem(pluginName: plugin.manifest.name, message: "Couldn’t start: \(error)"))
                 continue
@@ -75,8 +76,9 @@ public final class CaptureHost: @unchecked Sendable {
                 signal.yield()
                 signal.finish()
             }
-            let command = CaptureCommand(type: .start, take: take, settings: settings,
-                                         pluginDirectory: plugin.folder.path, hostTime: hostTime)
+            let command = CaptureCommand(type: .start, take: take, settings: settings, pluginDirectory: plugin.folder.path,
+                                         hostTime: hostTime,
+                                         granted: (plugin.manifest.permissions ?? []).filter(granted.contains))
             write(command, to: process.stdin)
             running.append(Running(plugin: plugin, process: process, exited: exited, collector: collector))
         }

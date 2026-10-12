@@ -57,6 +57,7 @@ final class AppModel {
 
     private let defaults = UserDefaults.standard
     let plugins = PluginHost()
+    let permissions = PermissionCenter()
     private let controller = MicController()
     private let recorder = MicRecorder()
     private var buttons: ButtonMonitor?
@@ -256,7 +257,7 @@ final class AppModel {
                     target = day.appendingPathComponent("\(stamp) \(kind).\(format.rawValue)")
                 }
                 try recorder.start(to: target, format: format)
-                startCapture(folder: day, stem: stamp)
+                await startCapture(folder: day, stem: stamp)
                 currentStem = stem
                 recordingMode = receiver.channelMode
                 recordingSolo = soloMic
@@ -292,15 +293,24 @@ final class AppModel {
         recorder.stop()
     }
 
-    private func startCapture(folder: URL, stem: String) {
+    private func startCapture(folder: URL, stem: String) async {
         let enabled = plugins.capturePlugins
         captureSources = []
         guard !enabled.isEmpty else { return }
+        // Lavdeck asks for each permission once, for every plugin; plugins run under Lavdeck's grants.
+        let needed = Array(Set(enabled.flatMap { $0.manifest.permissions ?? [] }))
+        await permissions.request(needed)
+        let granted = Set(permissions.granted(needed))
+        if let missing = needed.first(where: { !granted.contains($0) }) {
+            lastError = missing == "screen-recording"
+                ? "Screen recording isn’t on for this Lavdeck yet. Turn on Lavdeck in System Settings › Privacy & Security › Screen & System Audio Recording, then quit and reopen Lavdeck (macOS applies it on relaunch)."
+                : "\(PermissionCenter.name(missing)) access is off for Lavdeck. Turn it on in System Settings › Privacy & Security."
+        }
         let host = CaptureHost { [weak self] plugin, event in
             Task { @MainActor in self?.captureEvent(plugin, event) }
         }
         let problems = host.start(enabled.map { ($0, plugins.store.settings(for: $0)) },
-                                  take: CaptureTake(folder: folder.path, stem: stem))
+                                  take: CaptureTake(folder: folder.path, stem: stem), granted: granted)
         if let problem = problems.first { lastError = "\(problem.pluginName): \(problem.message)" }
         capture = host.isRunning ? host : nil
     }
