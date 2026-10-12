@@ -531,6 +531,13 @@ final class AppModel {
         if new.receiver.channelMode == nil, new.lastPush == nil { isConnected = false }
     }
 
+    private static let logFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f
+    }()
+
     /// Battery level and charging flag per transmitter, as last logged.
     private var loggedBattery: [Int: String] = [:]
 
@@ -545,7 +552,7 @@ final class AppModel {
             let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Lavdeck", isDirectory: true)
             try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let url = folder.appendingPathComponent("battery.log")
-            let line = "\(Date().formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits))) TX\(index) \(displayName(index)): \(state)\n"
+            let line = "\(Self.logFormatter.string(from: Date())) TX\(index) \(displayName(index)): \(state)\n"
             if let handle = try? FileHandle(forWritingTo: url) {
                 handle.seekToEndOfFile()
                 handle.write(Data(line.utf8))
