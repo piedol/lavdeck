@@ -31,10 +31,12 @@ final class LavdeckAppDelegate: NSObject, NSApplicationDelegate {
 struct LavdeckApp: App {
     @NSApplicationDelegateAdaptor(LavdeckAppDelegate.self) private var delegate
     @State private var model: AppModel
+    @State private var statusMenu: StatusMenu
 
     init() {
         let model = AppModel()
         LavdeckAppDelegate.model = model
+        _statusMenu = State(initialValue: StatusMenu(model: model))
         _model = State(initialValue: model)
         Snapshot.runIfRequested(model: model)
     }
