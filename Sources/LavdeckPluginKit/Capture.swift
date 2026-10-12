@@ -20,16 +20,11 @@ public struct CaptureSpec: Codable, Sendable, Equatable {
     public var arguments: [String]?
     /// What the plugin can record, e.g. `["screen", "camera"]`, for display in Lavdeck.
     public var sources: [String]?
-    /// Launch the capture process as its own app for macOS permissions, so screen recording and camera
-    /// access are granted to the plugin (by its own name) instead of being checked against Lavdeck. The
-    /// executable must sit inside a signed `.app` bundle with its own bundle identifier.
-    public var ownPermissions: Bool?
 
-    public init(executable: String? = nil, arguments: [String]? = nil, sources: [String]? = nil, ownPermissions: Bool? = nil) {
+    public init(executable: String? = nil, arguments: [String]? = nil, sources: [String]? = nil) {
         self.executable = executable
         self.arguments = arguments
         self.sources = sources
-        self.ownPermissions = ownPermissions
     }
 }
 
@@ -72,15 +67,19 @@ public struct CaptureCommand: Codable, Sendable, Equatable {
     public var pluginDirectory: String?
     /// Host-clock seconds when Lavdeck asked the recording to start.
     public var hostTime: Double?
+    /// Permissions from the plugin's manifest that Lavdeck holds right now, e.g. `["camera"]`. Lavdeck
+    /// asks for permissions itself; skip any source whose permission is missing rather than prompting.
+    public var granted: [String]?
 
     public init(type: Kind, take: CaptureTake? = nil, settings: [String: JSONValue]? = nil,
-                pluginDirectory: String? = nil, hostTime: Double? = nil) {
+                pluginDirectory: String? = nil, hostTime: Double? = nil, granted: [String]? = nil) {
         self.type = type
         self.protocol = PluginProtocol.version
         self.take = take
         self.settings = settings
         self.pluginDirectory = pluginDirectory
         self.hostTime = hostTime
+        self.granted = granted
     }
 
     /// Reads commands from standard input, one JSON object per line, until EOF (for Swift plugins).

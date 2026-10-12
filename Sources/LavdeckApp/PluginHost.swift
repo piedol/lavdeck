@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import LavdeckKit
 import LavdeckPluginKit
@@ -20,7 +21,7 @@ final class PluginHost {
     }
 
     private(set) var plugins: [InstalledPlugin] = []
-    private(set) var problems: [String] = []
+    var problems: [String] = []
     private(set) var jobs: [Job] = []
     /// Bumped whenever a job writes files, so views listing takes can refresh.
     private(set) var outputsRevision = 0
@@ -39,6 +40,20 @@ final class PluginHost {
     }
 
     var enabledPlugins: [InstalledPlugin] { plugins.filter { store.isEnabled($0.id) } }
+    /// Enabled plugins that ship a companion app (an editor, say).
+    var appPlugins: [InstalledPlugin] { _ = settingsRevision; return enabledPlugins.filter(\.manifest.isApp) }
+
+    /// Opens a take in an app plugin.
+    func open(_ take: Take, in plugin: InstalledPlugin) {
+        guard let spec = plugin.manifest.app, let url = spec.url(for: take.descriptor) else { return }
+        let bundle = plugin.folder.appendingPathComponent(spec.bundle)
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open([url], withApplicationAt: bundle, configuration: configuration) { _, error in
+            if let error { Task { @MainActor in self.problems.append("\(plugin.manifest.name): \(error.localizedDescription)") } }
+        }
+    }
+
     /// Enabled plugins that record alongside the audio.
     var capturePlugins: [InstalledPlugin] { _ = settingsRevision; return enabledPlugins.filter(\.manifest.isCapture) }
     var runningJobs: [Job] { jobs.filter { $0.state == .running } }

@@ -48,14 +48,17 @@ public struct PluginManifest: Codable, Sendable, Identifiable, Equatable {
     public var minAppVersion: String?
     /// How to start the plugin's capture process (protocol 2, `kind: capture`).
     public var capture: CaptureSpec?
+    /// The companion app to open (protocol 2, `kind: app`).
+    public var app: AppSpec?
 
     public var isCapture: Bool { kind == "capture" && capture != nil }
+    public var isApp: Bool { kind == "app" && app != nil }
 
     public init(id: String, name: String, version: String, protocol: Int = PluginProtocol.version,
                 summary: String? = nil, executable: String, arguments: [String]? = nil,
                 events: [String]? = nil, actions: [PluginAction]? = nil,
                 settings: [PluginSetting]? = nil, produces: [String]? = nil, kind: String? = nil,
-                permissions: [String]? = nil, minAppVersion: String? = nil, capture: CaptureSpec? = nil) {
+                permissions: [String]? = nil, minAppVersion: String? = nil, capture: CaptureSpec? = nil, app: AppSpec? = nil) {
         self.id = id
         self.name = name
         self.version = version
@@ -71,11 +74,39 @@ public struct PluginManifest: Codable, Sendable, Identifiable, Equatable {
         self.permissions = permissions
         self.minAppVersion = minAppVersion
         self.capture = capture
+        self.app = app
     }
 
     public static func load(from folder: URL) throws -> PluginManifest {
         let data = try Data(contentsOf: folder.appendingPathComponent("plugin.json"))
         return try JSONDecoder().decode(PluginManifest.self, from: data)
+    }
+}
+
+/// A companion app a plugin ships (protocol 2, `kind: app`), such as an editor. Lavdeck opens it on a take.
+public struct AppSpec: Codable, Sendable, Equatable {
+    /// The `.app` bundle, relative to the plugin folder.
+    public var bundle: String
+    /// URL to open a take with; `{folder}`, `{stem}` and `{id}` are filled in (percent-encoded).
+    public var openTake: String?
+    /// Button title on a take, e.g. `Open in Studio`.
+    public var actionTitle: String?
+
+    public init(bundle: String, openTake: String? = nil, actionTitle: String? = nil) {
+        self.bundle = bundle
+        self.openTake = openTake
+        self.actionTitle = actionTitle
+    }
+
+    /// The URL that opens a take in the app.
+    public func url(for take: TakeDescriptor) -> URL? {
+        guard let template = openTake else { return nil }
+        let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+?#"))
+        func encode(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s }
+        let filled = template.replacingOccurrences(of: "{folder}", with: encode(take.folder))
+            .replacingOccurrences(of: "{stem}", with: encode(take.stem))
+            .replacingOccurrences(of: "{id}", with: encode(take.id))
+        return URL(string: filled)
     }
 }
 
