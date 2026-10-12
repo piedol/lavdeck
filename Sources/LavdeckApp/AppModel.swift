@@ -112,10 +112,10 @@ final class AppModel {
     var debugForceLowBattery = false
 
     /// Linked transmitters whose battery estimate is at or below 1 of 7.
+    /// Mics to warn about for low battery. The Mobile RX doesn't report battery level (its level field is a
+    /// fixed placeholder), so there's nothing truthful to warn on; only the snapshot aid uses this.
     var lowBattery: [Int] {
-        receiver.connectedTransmitters.filter {
-            debugForceLowBattery || ((transmitter($0)?.batteryLevel ?? 7) <= 1 && transmitter($0)?.isCharging != true)
-        }.sorted()
+        debugForceLowBattery ? receiver.connectedTransmitters.sorted() : []
     }
 
     var glyph: GlyphState {
@@ -554,12 +554,12 @@ final class AppModel {
     /// Battery level and charging flag per transmitter, as last logged.
     private var loggedBattery: [Int: String] = [:]
 
-    /// Appends a line to ~/Library/Logs/Lavdeck/battery.log whenever a transmitter's battery estimate or
-    /// charging flag changes, so charge and drain can be followed over time.
+    /// Appends a line to ~/Library/Logs/Lavdeck/battery.log whenever a transmitter's charging flag or raw
+    /// status changes, to keep studying what the receiver reports.
     private func logBattery(_ new: MicStatus) {
         for index in new.receiver.connectedTransmitters {
             guard let tx = new.transmitters[index], let level = tx.batteryLevel else { continue }
-            let state = "battery \(level)/7 charging \(tx.isCharging == true ? "yes" : "no")"
+            let state = "charging \(tx.isCharging == true ? "yes" : "no") (raw \(String(format: "%08x", tx.rawFlags ?? 0)), level field \(level))"
             guard loggedBattery[index] != state else { continue }
             loggedBattery[index] = state
             let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Lavdeck", isDirectory: true)

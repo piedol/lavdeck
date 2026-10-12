@@ -54,7 +54,7 @@ func describe(_ status: MicStatus) -> String {
         let tx = status.transmitters[index]!
         let connected = rx.connectedTransmitters.contains(index) ? "connected" : "not connected"
         lines.append("TX\(index) \(tx.identity.productName ?? "?") [\(tx.identity.bluetoothID ?? "?")]  fw \(tx.identity.firmware ?? "?")"
-            + "  \(connected)  battery \(tx.batteryLevel.map { "\($0)/7" } ?? "?")\(tx.isCharging == true ? " charging" : "")"
+            + "  \(connected)  \(tx.isCharging == true ? "charging" : "on battery")"
             + "  meter \(tx.meterLevel.map(String.init) ?? "?")")
     }
     return lines.joined(separator: "\n")

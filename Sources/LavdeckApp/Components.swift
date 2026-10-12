@@ -100,28 +100,31 @@ struct LEDMeter: View {
     }
 }
 
-/// DJI reports battery as 0-7; shown as seven cells and labelled as an estimate.
-struct BatteryCells: View {
-    let level: Int?
-    var charging = false
+/// Whether a transmitter is charging. The Mobile RX relays the charging flag live but not the battery
+/// level (its level field stays at a fixed placeholder whatever the real charge), so no level is shown.
+struct ChargeState: View {
+    let charging: Bool?
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<7, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(level.map { i < $0 } == true ? (charging ? Theme.green : Theme.ink) : Theme.ledOff)
-                    .frame(width: 5, height: 10)
-            }
-            if charging {
-                Image(systemName: "bolt.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.green).padding(.leading, 2)
-            } else {
-                Text("est").font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.mute).padding(.leading, 2)
+        HStack(spacing: 3) {
+            switch charging {
+            case true?:
+                Image(systemName: "bolt.fill").font(.system(size: 9, weight: .bold))
+                Text("Charging")
+            case false?:
+                Image(systemName: "battery.75percent").font(.system(size: 10, weight: .medium))
+                Text("On battery")
+            case nil:
+                Text("—")
             }
         }
-        .help(level.map { "Battery \($0) of 7 (receiver estimate)\(charging ? ", charging" : "")" } ?? "Battery unknown")
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundStyle(charging == true ? Theme.green : Theme.mute)
+        .frame(height: 12)
+        .help("The receiver reports whether this mic is charging, but not its battery level. DJI Mimo reads the level from the mic directly over Bluetooth.")
         .accessibilityElement()
-        .accessibilityLabel("Battery")
-        .accessibilityValue(level.map { "\($0) of 7, estimate\(charging ? ", charging" : "")" } ?? "unknown")
+        .accessibilityLabel("Charging")
+        .accessibilityValue(charging == true ? "charging" : charging == false ? "on battery" : "unknown")
     }
 }
 
