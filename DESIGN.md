@@ -143,7 +143,7 @@ components:
 
 **Creative North Star: "The Channel Strip"**
 
-The popover is a small mixing console, not a settings list. Each transmitter is a vertical channel strip (name plate, arm button, link LED, LED meter ladder, battery cells, readout); the receiver is the master section (gain fader, MONO | STEREO switch, Record). The strips and master sit as raised faces on an anodized deck, each edged by a 0.5pt hairline. Every element is a piece of hardware vocabulary: scribble strip, LED, detented fader, two-position switch, transport button. This is the world's refusal of the category default of Control Center rows and toggles.
+The popover is a small mixing console, not a settings list. Each transmitter is a vertical channel strip (name plate, arm button, link LED, LED meter ladder, battery cells, readout); the receiver is the master section (gain fader, MONO | STEREO switch, capture switches, Record). The strips and master sit as raised faces on an anodized deck, each edged by a 0.5pt hairline. Every element is a piece of hardware vocabulary: scribble strip, LED, detented fader, two-position switch, transport button. This is the world's refusal of the category default of Control Center rows and toggles.
 
 Density is console density: 11-13pt type, 2pt segment gaps, 6-10pt gutters, a fixed 372pt-wide deck. Colour is almost entirely neutral grey; signal colour appears only where hardware would light up (LEDs, meter segments, the record state, warning notes). Truth over decoration is a visual rule here: values the receiver does not report show as an ellipsis or "not linked", and the provisional battery reading always carries its "est" tag.
 
@@ -239,6 +239,7 @@ The menu bar glyph (18x14pt) is two vertical channel bars and a short master stu
 ### Buttons
 - **Record / Stop:** a transport button under a hairline rule at the base of the master section. Idle: a 26pt Record Red disc with a 15% black edge, "Record" in body strong, "⌥⌘R" in body mute. Recording: a 22pt ink square (6pt radius), "Stop". Disabled (nothing armed) drops to 45% opacity with a tooltip.
 - **Arm button:** full strip width, well fill, 6pt radius, 8pt dot plus label caps. OFF: hollow mute ring, mute text. ARMED: ink dot and ink text. Live: Record Red dot, "REC" in Record Red Text, and a Record Red border at 60%. Locked during a take.
+- **Capture switches:** a row of independent SCREEN | CAMERA buttons under the MONO | STEREO switch, one per capture source a plugin offers, 6pt apart, 7pt radius, caps label at 10pt. Off: well fill, mute text. On: ink fill, on-ink text, like a selected mode segment. While recording they lock: a source capturing in the take shows Record Red Text with a Record Red border at 60% (like a live arm button), and an off source drops to 45%. The row only appears when a capture plugin is installed; the gain fader gives up its height (132pt to 96pt) so the master section still ends level with the strips.
 - **Footer actions:** plain SF Symbol buttons (folder, gear) in mute; the format readout is itself the Reveal in Finder button.
 
 ### Chips

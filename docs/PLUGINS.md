@@ -201,6 +201,8 @@ A capture plugin records something alongside Lavdeck's audio, such as the screen
 "permissions": ["screen-recording", "camera"]
 ```
 
+**Deck switches.** Give a source a `bool` setting with the same key (`"key": "screen"`) and Lavdeck shows it as an on/off button on the deck, under the MONO | STEREO switch, so people don't have to open Settings between takes. Clicking one on a switched-off plugin switches the plugin on with just that source. A plugin whose switches are all off isn't launched, and Lavdeck doesn't ask for the permission of a source that's off (it knows `screen` needs `screen-recording` and `camera` needs `camera`).
+
 When a recording starts, Lavdeck launches the capture executable (the manifest's `executable` unless `capture.executable` names another) with `capture.arguments`, and the two talk in JSON lines:
 
 | Direction | Line |

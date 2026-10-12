@@ -289,6 +289,15 @@ final class AppModel {
         return f
     }()
 
+    /// Switches a capture source (screen, camera) on or off for the next take, asking for its permission now
+    /// rather than at Record.
+    func setCapture(_ toggle: PluginHost.CaptureToggle, _ on: Bool) {
+        plugins.setOn(toggle, on)
+        if on, let permission = PermissionCenter.permission(forSource: toggle.source) {
+            Task { await permissions.request([permission]) }
+        }
+    }
+
     func stopRecording() {
         guard isRecording else { return }
         stopCapture()
@@ -300,7 +309,7 @@ final class AppModel {
         captureSources = []
         guard !enabled.isEmpty else { return }
         // Lavdeck asks for each permission once, for every plugin; plugins run under Lavdeck's grants.
-        let needed = Array(Set(enabled.flatMap { $0.manifest.permissions ?? [] }))
+        let needed = Array(Set(enabled.flatMap(plugins.neededPermissions)))
         await permissions.request(needed)
         let granted = Set(permissions.granted(needed))
         if let missing = needed.first(where: { !granted.contains($0) }) {
@@ -462,10 +471,12 @@ final class AppModel {
             recordingMode = .stereo
             recordingStarted = Date().addingTimeInterval(-767)
             recordingLevels = [-14, -21]
+            captureSources = plugins.captureToggles.filter(plugins.isOn).map(\.source)
         } else {
             isRecording = false
             recordingStarted = nil
             recordingLevels = []
+            captureSources = []
         }
     }
 

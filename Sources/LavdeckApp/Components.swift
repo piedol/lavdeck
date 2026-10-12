@@ -309,3 +309,76 @@ struct RecordButton: View {
         .accessibilityLabel(recording ? "Stop recording" : "Start recording")
     }
 }
+
+/// Quick on/off switches for capture sources (screen, camera) that record alongside the audio.
+/// On is ink like a selected mode segment; a source capturing in the live take turns record red.
+struct CaptureSwitch: View {
+    struct Item: Identifiable {
+        let id: String
+        let source: String
+        let on: Bool
+        let live: Bool
+    }
+    let items: [Item]
+    /// Locked while recording: capture settings are read when a take starts.
+    let locked: Bool
+    let onSet: (Item, Bool) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(items) { item in button(item) }
+        }
+        .allowsHitTesting(!locked)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Capture")
+    }
+
+    private func button(_ item: Item) -> some View {
+        let red = locked && item.live
+        let filled = item.on && !locked
+        let foreground = red ? Theme.recText : filled ? Theme.onInk : item.on ? Theme.ink : Theme.mute
+        return Button { onSet(item, !item.on) } label: {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 3) {
+                    Image(systemName: Self.symbol(item.source, on: item.on)).font(.system(size: 9, weight: .bold))
+                    Text(Self.title(item.source).uppercased()).font(.system(size: 10, weight: .bold)).tracking(0.3)
+                }
+                Text(Self.title(item.source).uppercased()).font(.system(size: 10, weight: .bold)).tracking(0.3)
+                Image(systemName: Self.symbol(item.source, on: item.on)).font(.system(size: 12, weight: .semibold))
+            }
+            .lineLimit(1)
+            .foregroundStyle(foreground)
+            .frame(maxWidth: .infinity).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 7).fill(filled ? Theme.ink : Theme.well))
+            .overlay(RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(red ? Theme.rec.opacity(0.6) : Theme.hairline, lineWidth: red ? 1 : 0.5))
+            .opacity(locked && !item.on ? 0.45 : 1)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(locked ? "Stop recording to change what’s captured"
+              : item.on ? "\(Self.title(item.source)) records with each take. Click to turn it off."
+              : "Click to record the \(Self.title(item.source).lowercased()) with each take.")
+        .accessibilityLabel("Record \(Self.title(item.source).lowercased())")
+        .accessibilityValue(item.on ? "on" : "off")
+        .accessibilityAddTraits(.isToggle)
+    }
+
+    static func title(_ source: String) -> String {
+        switch source {
+        case "screen": "Screen"
+        case "camera": "Camera"
+        case "system-audio": "System audio"
+        default: source.capitalized
+        }
+    }
+
+    private static func symbol(_ source: String, on: Bool) -> String {
+        switch source {
+        case "screen": "display"
+        case "camera": on ? "video.fill" : "video.slash"
+        case "system-audio": on ? "speaker.wave.2.fill" : "speaker.slash"
+        default: "record.circle"
+        }
+    }
+}

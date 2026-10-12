@@ -314,12 +314,22 @@ private struct MasterSection: View {
             } else {
                 Text("GAIN").capsLabel()
             }
+            let toggles = model.plugins.captureToggles
+            // The capture row takes its height from the fader so the section still lines up with the strips.
             GainFader(steps: [-12, -6, 0, 6, 12], value: model.displayedGain, pending: model.pendingGain != nil,
-                      onSet: model.setGain, height: model.isRecording ? 84 : 132)
+                      onSet: model.setGain, height: model.isRecording ? 84 : toggles.isEmpty ? 132 : 96)
             ModeSwitch(mode: display(model.displayedChannel), disabled: model.isRecording || model.pendingChannel != nil) { stereo in
                 model.setChannel(stereo ? .stereo : .mono)
             }
             .help(model.isRecording ? "Stop recording to change the channel mode" : "Mono mixes both mics; stereo puts TX1 left and TX2 right")
+            if !toggles.isEmpty {
+                CaptureSwitch(items: toggles.map { toggle in
+                    .init(id: toggle.id, source: toggle.source, on: model.plugins.isOn(toggle),
+                          live: model.captureSources.contains(toggle.source))
+                }, locked: model.isRecording) { item, on in
+                    if let toggle = toggles.first(where: { $0.id == item.id }) { model.setCapture(toggle, on) }
+                }
+            }
             RecordButton(recording: model.isRecording, disabled: !model.isRecording && model.armed.isEmpty,
                          action: model.toggleRecording)
         }

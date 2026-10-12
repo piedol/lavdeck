@@ -54,8 +54,56 @@ final class PluginHost {
         }
     }
 
-    /// Enabled plugins that record alongside the audio.
-    var capturePlugins: [InstalledPlugin] { _ = settingsRevision; return enabledPlugins.filter(\.manifest.isCapture) }
+    /// A capture source the deck can switch on and off: a source listed in `capture.sources` that has a
+    /// bool setting with the same key (the Screen & Camera plugin's `screen` and `camera`).
+    struct CaptureToggle: Identifiable, Equatable {
+        let plugin: InstalledPlugin
+        let source: String
+        var id: String { "\(plugin.id)/\(source)" }
+        static func == (a: Self, b: Self) -> Bool { a.id == b.id }
+    }
+
+    /// Toggles for every installed capture plugin, enabled or not, so one click can switch a plugin on.
+    var captureToggles: [CaptureToggle] {
+        plugins.filter(\.manifest.isCapture).flatMap { plugin in
+            let bools = Set((plugin.manifest.settings ?? []).filter { $0.type == .bool }.map(\.key))
+            return (plugin.manifest.capture?.sources ?? []).filter(bools.contains).map { CaptureToggle(plugin: plugin, source: $0) }
+        }
+    }
+
+    /// On when the plugin is enabled and its setting for this source is on.
+    func isOn(_ toggle: CaptureToggle) -> Bool {
+        isEnabled(toggle.plugin) && store.settings(for: toggle.plugin)[toggle.source]?.boolValue == true
+    }
+
+    func setOn(_ toggle: CaptureToggle, _ on: Bool) {
+        if on, !store.isEnabled(toggle.plugin.id) {
+            // Switching a plugin on from the deck records just the source that was clicked.
+            for other in captureToggles where other.plugin.id == toggle.plugin.id {
+                store.setSetting(.bool(false), key: other.source, for: other.plugin.id)
+            }
+            store.setEnabled(toggle.plugin.id, true)
+        }
+        store.setSetting(.bool(on), key: toggle.source, for: toggle.plugin.id)
+        settingsRevision += 1
+    }
+
+    /// Enabled plugins that record alongside the audio, leaving out any whose deck toggles are all off.
+    var capturePlugins: [InstalledPlugin] {
+        _ = settingsRevision
+        let toggles = captureToggles
+        return enabledPlugins.filter(\.manifest.isCapture).filter { plugin in
+            let own = toggles.filter { $0.plugin.id == plugin.id }
+            return own.isEmpty || own.contains(where: isOn)
+        }
+    }
+
+    /// The permissions `plugin` needs for the sources it will record: a source switched off doesn't need its permission.
+    func neededPermissions(_ plugin: InstalledPlugin) -> [String] {
+        let off = captureToggles.filter { $0.plugin.id == plugin.id && !isOn($0) }
+            .compactMap { PermissionCenter.permission(forSource: $0.source) }
+        return (plugin.manifest.permissions ?? []).filter { !off.contains($0) }
+    }
     var runningJobs: [Job] { jobs.filter { $0.state == .running } }
 
     func isEnabled(_ plugin: InstalledPlugin) -> Bool { _ = settingsRevision; return store.isEnabled(plugin.id) }

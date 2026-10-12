@@ -59,6 +59,15 @@ final class PermissionCenter {
         revision += 1
     }
 
+    /// The permission a capture source needs, e.g. `screen` → `screen-recording`.
+    static func permission(forSource source: String) -> String? {
+        switch source {
+        case "screen": "screen-recording"
+        case "camera": "camera"
+        default: nil
+        }
+    }
+
     static func name(_ permission: String) -> String {
         switch permission {
         case "screen-recording": "Screen recording"
