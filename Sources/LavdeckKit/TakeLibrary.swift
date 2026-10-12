@@ -96,7 +96,8 @@ public struct Take: Identifiable, Sendable, Equatable {
     public var transcriptURL: URL {
         URL(fileURLWithPath: descriptor.folder).appendingPathComponent("\(descriptor.stem).transcript.json")
     }
-    public var hasTranscript: Bool { FileManager.default.fileExists(atPath: transcriptURL.path) }
+    /// From the scanned file list, so lists don't stat the disk on every render.
+    public var hasTranscript: Bool { descriptor.has("transcript") }
     public var audioFiles: [TakeFile] { descriptor.files.filter { [.stereo, .mix, .track].contains($0.role) } }
     public var videoFiles: [TakeFile] { descriptor.files.filter { $0.kind == "video" } }
     public var allURLs: [URL] { descriptor.files.map { URL(fileURLWithPath: $0.path) } }

@@ -17,9 +17,14 @@ final class PluginHost {
         let pluginName: String
         let takeID: String
         let title: String
+        /// Started by a finished take (`event`) rather than by hand in the Recordings window (`action`).
+        let automatic: Bool
         var fraction: Double = 0
         var message: String?
         var state: State = .running
+        /// The user closed this job's failure note.
+        var dismissed = false
+        var failure: String? { if case .failed(let reason) = state, reason != "Cancelled" { reason } else { nil } }
     }
 
     private(set) var plugins: [InstalledPlugin] = []
@@ -139,6 +144,42 @@ final class PluginHost {
         return enabledPlugins.flatMap { p in (p.manifest.actions ?? []).map { (p, $0) } }
     }
 
+    /// Actions that make sense for `take` (its plugin's `requires` are met).
+    func actions(for take: Take) -> [(plugin: InstalledPlugin, action: PluginAction)] {
+        actions.filter { $0.action.applies(to: take.descriptor) }
+    }
+
+    /// A failure among each plugin's most recent job that ran on its own after a take, until it's dismissed or
+    /// that plugin's next automatic job runs. (Per plugin: a take starts several plugins at once, and the last one
+    /// started mustn't hide another's failure.) Failures of actions started by hand show only where they were started.
+    var automaticFailure: Job? {
+        let automatic = jobs.filter(\.automatic)
+        let newest = Dictionary(automatic.map { ($0.pluginID, $0.id) }, uniquingKeysWith: { _, later in later })
+        return automatic.last { newest[$0.pluginID] == $0.id && $0.failure != nil && !$0.dismissed }
+    }
+
+    func dismiss(_ job: Job) {
+        if let i = jobs.firstIndex(where: { $0.id == job.id }) { jobs[i].dismissed = true }
+    }
+
+    /// The take's failed job (optionally from one plugin) that hasn't been dismissed or followed by a newer run of
+    /// the same plugin on the same take. `jobs` is in start order, so the last job per plugin is the newest.
+    func failure(for takeID: String, plugin: String? = nil) -> Job? {
+        let mine = jobs.filter { $0.takeID == takeID && (plugin == nil || $0.pluginID == plugin) }
+        let newest = Dictionary(mine.map { ($0.pluginID, $0.id) }, uniquingKeysWith: { _, later in later })
+        return mine.last { newest[$0.pluginID] == $0.id && $0.failure != nil && !$0.dismissed }
+    }
+
+    /// The enabled plugin that makes a kind of output for takes, e.g. `video` or `transcript`.
+    func plugin(producing kind: String) -> InstalledPlugin? {
+        enabledPlugins.first { $0.manifest.produces?.contains(kind) == true }
+    }
+
+    /// Cancels everything running or queued for these takes (before they go to the Trash).
+    func cancelJobs(for takeIDs: Set<String>) {
+        for job in jobs where takeIDs.contains(job.takeID) && [.running, .queued].contains(job.state) { cancel(job) }
+    }
+
     /// The take's running or queued job, if any.
     func job(for takeID: String, plugin: String? = nil) -> Job? {
         jobs.last { $0.takeID == takeID && [.running, .queued].contains($0.state) && (plugin == nil || $0.pluginID == plugin) }
@@ -173,7 +214,7 @@ final class PluginHost {
 
     private func start(_ plugin: InstalledPlugin, kind: String, name: String, title: String, take: Take) {
         let request = plugin.request(kind: kind, name: name, take: take.descriptor, settings: store.settings(for: plugin))
-        var job = Job(pluginID: plugin.id, pluginName: plugin.manifest.name, takeID: take.id, title: title)
+        var job = Job(pluginID: plugin.id, pluginName: plugin.manifest.name, takeID: take.id, title: title, automatic: kind == "event")
         if jobs.contains(where: { $0.pluginID == plugin.id && [.running, .queued].contains($0.state) }) {
             job.state = .queued
             job.message = "Queued"

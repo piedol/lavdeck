@@ -44,6 +44,7 @@ enum Snapshot {
         }
         if let i = args.firstIndex(of: "--recordings-window") {
             showRecordings(model: model, dark: args.contains("--dark"), selectAll: args.contains("--select-all"),
+                           row: args.firstIndex(of: "--select-row").flatMap { Int(args[safe: $0 + 1] ?? "") },
                            seconds: Double(args[safe: i + 1] ?? "") ?? 20)
             return
         }
@@ -136,8 +137,8 @@ enum Snapshot {
 
     /// `Lavdeck --recordings-window [seconds] [--dark] [--select-all]` opens the Recordings window on its own and
     /// prints its window number, so it can be captured with `screencapture -l`. `--select-all` focuses the table
-    /// and sends Select All (⌘A), to show the multi-selection pane.
-    private static func showRecordings(model: AppModel, dark: Bool, selectAll: Bool, seconds: Double) {
+    /// and sends Select All (⌘A), to show the multi-selection pane; `--select-row n` selects one row instead.
+    private static func showRecordings(model: AppModel, dark: Bool, selectAll: Bool, row: Int?, seconds: Double) {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(500))
             NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -149,6 +150,10 @@ enum Snapshot {
             window = w
             NSApp.activate()
             w.makeKeyAndOrderFront(nil)
+            if let row {
+                try? await Task.sleep(for: .seconds(1))
+                w.contentView.flatMap(firstTable)?.selectRowIndexes([row], byExtendingSelection: false)
+            }
             if selectAll {
                 try? await Task.sleep(for: .seconds(1))
                 // What Edit › Select All (⌘A) sends to the focused table. Sent directly: this dev window isn't

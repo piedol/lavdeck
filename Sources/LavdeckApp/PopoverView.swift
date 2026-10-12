@@ -118,10 +118,12 @@ struct PopoverView: View {
         ForEach(model.plugins.runningJobs) { job in
             JobNote(job: job, queued: model.plugins.queuedJobs.filter { $0.pluginID == job.pluginID }.count, open: showRecordings)
         }
-        if let failed = model.plugins.jobs.last(where: { if case .failed = $0.state { true } else { false } }),
-           case .failed(let reason) = failed.state, reason != "Cancelled" {
-            Note(text: "\(failed.pluginName) failed on the \(failed.takeID.split(separator: "/").last ?? "") take: \(reason)",
-                 symbol: "exclamationmark.triangle.fill")
+        // Only jobs that ran on their own after a take; a failure of something started in Recordings shows there.
+        if let failed = model.plugins.automaticFailure, let reason = failed.failure {
+            Note(text: "\(failed.pluginName) couldn’t finish the last take: \(reason)",
+                 symbol: "exclamationmark.triangle.fill",
+                 action: ("Show", { model.focusTakeID = failed.takeID; showRecordings() }),
+                 onDismiss: { model.plugins.dismiss(failed) })
         }
         if let error = model.lastError {
             Note(text: error, symbol: "exclamationmark.triangle.fill")
@@ -187,11 +189,23 @@ private struct IdentifyBanner: View {
 private struct Note: View {
     let text: String
     let symbol: String
+    var action: (title: String, run: () -> Void)? = nil
+    var onDismiss: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
             Image(systemName: symbol).font(.system(size: 11))
             Text(text).fixedSize(horizontal: false, vertical: true)
+            if action != nil || onDismiss != nil { Spacer(minLength: 0) }
+            if let action {
+                Button(action.title, action: action.run).buttonStyle(.link).font(Theme.labelBold)
+            }
+            if let onDismiss {
+                Button(action: onDismiss) { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)) }
+                    .buttonStyle(.plain)
+                    .help("Dismiss")
+                    .accessibilityLabel("Dismiss")
+            }
         }
         .font(Theme.label)
         .foregroundStyle(Theme.warnText)

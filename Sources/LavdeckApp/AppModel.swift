@@ -228,6 +228,8 @@ final class AppModel {
             return
         }
         lastError = nil
+        // A new take makes the last take's processing failure old news.
+        while let failed = plugins.automaticFailure { plugins.dismiss(failed) }
         Task { [weak self] in
             guard let self else { return }
             if identifying { await endIdentify() }
@@ -424,6 +426,8 @@ final class AppModel {
 
     /// Bumped when a take is written or deleted, so the recordings manager refreshes.
     private(set) var libraryRevision = 0
+    /// A take the Recordings window should select when it next appears (e.g. "Show" on a failure note).
+    var focusTakeID: String?
     func noteLibraryChanged() { libraryRevision += 1 }
 
     /// All takes in the recordings folder, newest first.
