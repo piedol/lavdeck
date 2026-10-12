@@ -22,6 +22,16 @@ enum Snapshot {
             }
             exit(0)
         }
+        if args.contains("--quit-while-recording") {
+            // Development aid: start a take, then quit mid-recording like macOS's "Quit & Reopen" does.
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                model.startRecording()
+                try? await Task.sleep(for: .seconds(5))
+                NSApp.terminate(nil)
+            }
+            return
+        }
         if let i = args.firstIndex(of: "--recordings-window") {
             showRecordings(model: model, dark: args.contains("--dark"), seconds: Double(args[safe: i + 1] ?? "") ?? 20)
             return
