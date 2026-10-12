@@ -116,7 +116,7 @@ struct PopoverView: View {
 
     @ViewBuilder private var notes: some View {
         ForEach(model.plugins.runningJobs) { job in
-            JobNote(job: job, open: showRecordings)
+            JobNote(job: job, queued: model.plugins.queuedJobs.filter { $0.pluginID == job.pluginID }.count, open: showRecordings)
         }
         if let failed = model.plugins.jobs.last(where: { if case .failed = $0.state { true } else { false } }),
            case .failed(let reason) = failed.state, reason != "Cancelled" {
@@ -348,6 +348,8 @@ private struct MasterSection: View {
 private struct JobNote: View {
     @Environment(AppModel.self) private var model
     let job: PluginHost.Job
+    /// More takes waiting for the same plugin.
+    var queued = 0
     let open: () -> Void
 
     var body: some View {
@@ -355,7 +357,8 @@ private struct JobNote: View {
             ProgressView(value: job.fraction).progressViewStyle(.circular).controlSize(.small)
             VStack(alignment: .leading, spacing: 1) {
                 Text(job.title).font(Theme.labelBold).foregroundStyle(Theme.ink)
-                Text(job.message ?? "Working").font(Theme.label).foregroundStyle(Theme.mute).lineLimit(1)
+                Text((job.message ?? "Working") + (queued > 0 ? " · \(queued) more queued" : ""))
+                    .font(Theme.label).foregroundStyle(Theme.mute).lineLimit(1)
             }
             Spacer()
             Button("Show", action: open).buttonStyle(.link).font(Theme.label)

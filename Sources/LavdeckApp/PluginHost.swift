@@ -9,7 +9,9 @@ import Observation
 @Observable
 final class PluginHost {
     struct Job: Identifiable, Equatable {
-        enum State: Equatable { case running, finished(String?), failed(String) }
+        /// `queued` waits for the same plugin's running job: a plugin runs one job at a time, so a batch
+        /// (transcribe ten takes) doesn't start ten processes at once.
+        enum State: Equatable { case queued, running, finished(String?), failed(String) }
         let id = UUID()
         let pluginID: String
         let pluginName: String
@@ -30,6 +32,8 @@ final class PluginHost {
 
     let store = PluginStore(defaults: .standard)
     private var tasks: [UUID: Task<Void, Never>] = [:]
+    /// Requests for queued jobs, started in order as the plugin's running job finishes.
+    private var queued: [UUID: (plugin: InstalledPlugin, request: PluginRequest)] = [:]
 
     init() { reload() }
 
@@ -105,6 +109,7 @@ final class PluginHost {
         return (plugin.manifest.permissions ?? []).filter { !off.contains($0) }
     }
     var runningJobs: [Job] { jobs.filter { $0.state == .running } }
+    var queuedJobs: [Job] { jobs.filter { $0.state == .queued } }
 
     func isEnabled(_ plugin: InstalledPlugin) -> Bool { _ = settingsRevision; return store.isEnabled(plugin.id) }
 
@@ -134,8 +139,9 @@ final class PluginHost {
         return enabledPlugins.flatMap { p in (p.manifest.actions ?? []).map { (p, $0) } }
     }
 
+    /// The take's running or queued job, if any.
     func job(for takeID: String, plugin: String? = nil) -> Job? {
-        jobs.last { $0.takeID == takeID && $0.state == .running && (plugin == nil || $0.pluginID == plugin) }
+        jobs.last { $0.takeID == takeID && [.running, .queued].contains($0.state) && (plugin == nil || $0.pluginID == plugin) }
     }
 
     /// Runs every enabled plugin that listens to `take.finished`.
@@ -150,15 +156,37 @@ final class PluginHost {
         start(plugin, kind: "action", name: action.id, title: action.title, take: take)
     }
 
-    func cancel(_ job: Job) { tasks[job.id]?.cancel() }
+    /// Runs `action` on each take in turn (takes it's already running or queued for are skipped).
+    func run(_ action: PluginAction, of plugin: InstalledPlugin, on takes: [Take]) {
+        for take in takes { run(action, of: plugin, on: take) }
+    }
+
+    func cancel(_ job: Job) {
+        if queued.removeValue(forKey: job.id) != nil {
+            if let i = jobs.firstIndex(where: { $0.id == job.id }) { jobs[i].state = .failed("Cancelled") }
+            return
+        }
+        tasks[job.id]?.cancel()
+    }
 
     func dismissFinished() { jobs.removeAll { $0.state != .running } }
 
     private func start(_ plugin: InstalledPlugin, kind: String, name: String, title: String, take: Take) {
         let request = plugin.request(kind: kind, name: name, take: take.descriptor, settings: store.settings(for: plugin))
-        let job = Job(pluginID: plugin.id, pluginName: plugin.manifest.name, takeID: take.id, title: title)
+        var job = Job(pluginID: plugin.id, pluginName: plugin.manifest.name, takeID: take.id, title: title)
+        if jobs.contains(where: { $0.pluginID == plugin.id && [.running, .queued].contains($0.state) }) {
+            job.state = .queued
+            job.message = "Queued"
+            jobs.append(job)
+            queued[job.id] = (plugin, request)
+            return
+        }
         jobs.append(job)
-        let id = job.id
+        launch(job.id, plugin, request)
+    }
+
+    private func launch(_ id: UUID, _ plugin: InstalledPlugin, _ request: PluginRequest) {
+        if let i = jobs.firstIndex(where: { $0.id == id }) { jobs[i].state = .running; jobs[i].message = nil }
         tasks[id] = Task { [weak self] in
             do {
                 let result = try await PluginRunner.run(plugin, request: request) { message in
@@ -191,5 +219,9 @@ final class PluginHost {
         jobs[i].state = state
         if case .finished(let note) = state { jobs[i].fraction = 1; jobs[i].message = jobs[i].message ?? note }
         outputsRevision += 1
+        let pluginID = jobs[i].pluginID
+        if let next = jobs.first(where: { $0.pluginID == pluginID && $0.state == .queued }), let item = queued.removeValue(forKey: next.id) {
+            launch(next.id, item.plugin, item.request)
+        }
     }
 }
