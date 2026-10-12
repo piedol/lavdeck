@@ -7,7 +7,11 @@ import Foundation
 /// and reads newline-delimited ``PluginMessage`` JSON objects from its standard output until it
 /// exits. Plugins can be written in any language; see `docs/PLUGINS.md`.
 public enum PluginProtocol {
-    public static let version = 1
+    /// Newest protocol this SDK speaks. Version 2 adds capture plugins (see `Capture.swift`); version 1
+    /// plugins keep working unchanged.
+    public static let version = 2
+    /// Protocol versions Lavdeck accepts in a manifest.
+    public static let supported = 1...2
     /// Event sent when a recording has finished and its files (including split tracks) are written.
     public static let takeFinished = "take.finished"
 }
@@ -33,11 +37,25 @@ public struct PluginManifest: Codable, Sendable, Identifiable, Equatable {
     public var settings: [PluginSetting]?
     /// Output kinds the plugin can produce, e.g. `transcript`, `audio`.
     public var produces: [String]?
+    /// What the plugin is: `post` (default; jobs after a take or on demand), `capture` (records alongside
+    /// Lavdeck, see ``CaptureSpec``) or `app` (a companion app with its own windows). A capture plugin may
+    /// also handle post events and actions with its main executable.
+    public var kind: String?
+    /// System permissions the plugin needs, shown before it is switched on: `screen-recording`, `camera`,
+    /// `microphone`, `network`.
+    public var permissions: [String]?
+    /// Oldest Lavdeck version the plugin works with, e.g. `0.2`.
+    public var minAppVersion: String?
+    /// How to start the plugin's capture process (protocol 2, `kind: capture`).
+    public var capture: CaptureSpec?
+
+    public var isCapture: Bool { kind == "capture" && capture != nil }
 
     public init(id: String, name: String, version: String, protocol: Int = PluginProtocol.version,
                 summary: String? = nil, executable: String, arguments: [String]? = nil,
                 events: [String]? = nil, actions: [PluginAction]? = nil,
-                settings: [PluginSetting]? = nil, produces: [String]? = nil) {
+                settings: [PluginSetting]? = nil, produces: [String]? = nil, kind: String? = nil,
+                permissions: [String]? = nil, minAppVersion: String? = nil, capture: CaptureSpec? = nil) {
         self.id = id
         self.name = name
         self.version = version
@@ -49,6 +67,10 @@ public struct PluginManifest: Codable, Sendable, Identifiable, Equatable {
         self.actions = actions
         self.settings = settings
         self.produces = produces
+        self.kind = kind
+        self.permissions = permissions
+        self.minAppVersion = minAppVersion
+        self.capture = capture
     }
 
     public static func load(from folder: URL) throws -> PluginManifest {
@@ -185,20 +207,30 @@ public struct TakeFile: Codable, Sendable, Equatable {
         case derived
         /// Lavdeck's own metadata sidecar.
         case metadata
+        /// Recorded by a capture plugin alongside the audio (screen, camera, system audio). See `source`
+        /// and `offset`.
+        case capture
     }
 
     public var path: String
     public var role: Role
     /// Transmitter index (1 or 2) for `track` files.
     public var mic: Int?
-    /// Free-form kind for derived files, e.g. `transcript`, `audio`.
+    /// Free-form kind for derived and captured files, e.g. `transcript`, `audio`, `video`.
     public var kind: String?
+    /// What a captured or composed video shows: `screen`, `camera`, `system-audio`, `pip`.
+    public var source: String?
+    /// Seconds after the take's first audio sample that this file's first frame happened (negative when
+    /// it started earlier). Set for captured media; use it to line files up.
+    public var offset: Double?
 
-    public init(path: String, role: Role, mic: Int? = nil, kind: String? = nil) {
+    public init(path: String, role: Role, mic: Int? = nil, kind: String? = nil, source: String? = nil, offset: Double? = nil) {
         self.path = path
         self.role = role
         self.mic = mic
         self.kind = kind
+        self.source = source
+        self.offset = offset
     }
 }
 

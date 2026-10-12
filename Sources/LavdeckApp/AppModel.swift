@@ -65,6 +65,11 @@ final class AppModel {
     private var currentStem: URL?
     private(set) var recordingMode: ChannelMode?
     private var recordingSolo: Int?
+    /// Capture plugins (screen, camera, …) recording alongside the current take.
+    private var capture: CaptureHost?
+    private var captureStop: Task<(outputs: [CaptureOutput], problems: [CaptureHost.Problem]), Never>?
+    /// Sources capture plugins have started for the current take, e.g. `screen`, `camera`.
+    private(set) var captureSources: [String] = []
 
     init() {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -212,7 +217,13 @@ final class AppModel {
     }
 
     func startRecording() {
-        guard !isRecording, !armed.isEmpty else { return }
+        guard !isRecording else { return }
+        guard !armed.isEmpty else {
+            // The hotkey and mic taps work with the popover closed, so say why nothing happened.
+            NSSound.beep()
+            lastError = "Both mics are switched off. Click OFF under a mic to arm it, then record."
+            return
+        }
         lastError = nil
         Task { [weak self] in
             guard let self else { return }
@@ -229,11 +240,10 @@ final class AppModel {
                 return
             }
             let now = Date()
-            let day = recordingsRoot.appendingPathComponent(now.formatted(.iso8601.year().month().day()), isDirectory: true)
+            let day = recordingsRoot.appendingPathComponent(Self.dayFormatter.string(from: now), isDirectory: true)
             do {
                 try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
-                let stamp = now.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits))
-                    .replacingOccurrences(of: ":", with: ".")
+                let stamp = Self.stemFormatter.string(from: now)  // 24-hour, e.g. 19.49.23
                 let stem = day.appendingPathComponent(stamp)
                 let target: URL
                 if soloMic != nil {
@@ -246,6 +256,7 @@ final class AppModel {
                     target = day.appendingPathComponent("\(stamp) \(kind).\(format.rawValue)")
                 }
                 try recorder.start(to: target, format: format)
+                startCapture(folder: day, stem: stamp)
                 currentStem = stem
                 recordingMode = receiver.channelMode
                 recordingSolo = soloMic
@@ -260,9 +271,54 @@ final class AppModel {
         }
     }
 
+    /// Local date (the ISO 8601 format style defaults to UTC, which put evening takes in tomorrow's folder).
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private static let stemFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "HH.mm.ss"
+        return f
+    }()
+
     func stopRecording() {
         guard isRecording else { return }
+        stopCapture()
         recorder.stop()
+    }
+
+    private func startCapture(folder: URL, stem: String) {
+        let enabled = plugins.capturePlugins
+        captureSources = []
+        guard !enabled.isEmpty else { return }
+        let host = CaptureHost { [weak self] plugin, event in
+            Task { @MainActor in self?.captureEvent(plugin, event) }
+        }
+        let problems = host.start(enabled.map { ($0, plugins.store.settings(for: $0)) },
+                                  take: CaptureTake(folder: folder.path, stem: stem))
+        if let problem = problems.first { lastError = "\(problem.pluginName): \(problem.message)" }
+        capture = host.isRunning ? host : nil
+    }
+
+    private func captureEvent(_ plugin: InstalledPlugin, _ event: CaptureEvent) {
+        switch event.type {
+        case .started:
+            if let source = event.source, !captureSources.contains(source) { captureSources.append(source) }
+        case .error:
+            lastError = "\(plugin.manifest.name): \(event.message ?? "error")"
+        default: break
+        }
+    }
+
+    private func stopCapture() {
+        guard let host = capture, captureStop == nil else { return }
+        capture = nil
+        captureStop = Task.detached { await host.stop() }
     }
 
     private func recordingFinished(_ url: URL, error: Error?) {
@@ -274,10 +330,15 @@ final class AppModel {
         recordingStarted = nil
         lastSavedFolder = currentStem?.deletingLastPathComponent() ?? url.deletingLastPathComponent()
         let stem = currentStem, solo = recordingSolo, mode = recordingMode, fmt = format, split = splitTracks
+        let audioStart = recorder.startHostTime
+        stopCapture()  // the audio can end on its own (an error, the receiver unplugged)
+        let captureDone = captureStop
+        captureStop = nil
         currentStem = nil
         recordingSolo = nil
         if let error {
             lastError = "Recording stopped with an error: \(error.localizedDescription)"
+            Task { _ = await captureDone?.value; self.captureSources = [] }
             return
         }
         guard let stem else { return }
@@ -299,13 +360,21 @@ final class AppModel {
                 }
                 return nil
             }.value
+            let captured = await captureDone?.value
             guard let self else { return }
+            captureSources = []
             if let failure { lastError = failure }
+            if let problem = captured?.problems.first { lastError = "\(problem.pluginName): \(problem.message)" }
             let folder = stem.deletingLastPathComponent()
             let stemName = stem.lastPathComponent
+            let media = captured?.outputs.map { output in
+                TakeMetadata.Media(file: (output.path as NSString).lastPathComponent, source: output.source, kind: output.kind,
+                                   offset: zip(output.startHostTime, audioStart).map { $0 - $1 }, plugin: output.pluginID)
+            }
             let metadata = TakeMetadata(started: started ?? Date(), duration: started.map { Date().timeIntervalSince($0) },
                                         channelMode: mode.map { "\($0)" }, format: fmt.rawValue,
-                                        mics: mics.map { var m = $0; if solo != nil { m.armed = m.index == solo }; return m })
+                                        mics: mics.map { var m = $0; if solo != nil { m.armed = m.index == solo }; return m },
+                                        audioStartHostTime: audioStart, media: (media?.isEmpty ?? true) ? nil : media)
             try? metadata.write(to: folder.appendingPathComponent("\(stemName).take.json"))
             if let take = TakeLibrary.take(folder: folder, stem: stemName, micNames: micNames) {
                 plugins.takeFinished(take)
@@ -443,4 +512,9 @@ final class AppModel {
         monitor.start()
         buttons = monitor
     }
+}
+
+private func zip(_ a: Double?, _ b: Double?) -> (Double, Double)? {
+    guard let a, let b else { return nil }
+    return (a, b)
 }

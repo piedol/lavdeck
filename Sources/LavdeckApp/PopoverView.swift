@@ -37,7 +37,12 @@ struct PopoverView: View {
                 HStack(spacing: 5) {
                     Circle().fill(Theme.rec).frame(width: 8, height: 8)
                     Text("REC").font(Theme.caps).foregroundStyle(Theme.recText)
+                    ForEach(model.captureSources, id: \.self) { source in
+                        Text("· \(source == "screen" ? "Screen" : source == "camera" ? "Camera" : source.capitalized)")
+                            .font(Theme.label).foregroundStyle(Theme.mute)
+                    }
                 }
+                .accessibilityElement(children: .combine)
             } else if model.isConnected && !model.identifying {
                 Button { model.startIdentify() } label: {
                     HStack(spacing: 4) {

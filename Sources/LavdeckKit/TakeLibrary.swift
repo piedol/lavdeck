@@ -17,22 +17,48 @@ public struct TakeMetadata: Codable, Sendable, Equatable {
         }
     }
 
+    /// A file a capture plugin recorded with the take, and where it sits relative to the audio.
+    public struct Media: Codable, Sendable, Equatable {
+        /// File name in the take's folder.
+        public var file: String
+        /// `screen`, `camera`, `system-audio`.
+        public var source: String
+        /// `video` or `audio`.
+        public var kind: String
+        /// Seconds after the first audio sample that the file's first frame happened.
+        public var offset: Double?
+        public var plugin: String?
+        public init(file: String, source: String, kind: String, offset: Double?, plugin: String?) {
+            self.file = file
+            self.source = source
+            self.kind = kind
+            self.offset = offset
+            self.plugin = plugin
+        }
+    }
+
     public var version = 1
     public var started: Date
     public var duration: Double?
     public var channelMode: String?
     public var format: String
     public var mics: [Mic]
+    /// Host-clock seconds of the audio's first sample, when known.
+    public var audioStartHostTime: Double?
+    public var media: [Media]?
 
-    public init(started: Date, duration: Double?, channelMode: String?, format: String, mics: [Mic]) {
+    public init(started: Date, duration: Double?, channelMode: String?, format: String, mics: [Mic],
+                audioStartHostTime: Double? = nil, media: [Media]? = nil) {
         self.started = started
         self.duration = duration
         self.channelMode = channelMode
         self.format = format
         self.mics = mics
+        self.audioStartHostTime = audioStartHostTime
+        self.media = media
     }
 
-    private enum CodingKeys: String, CodingKey { case version, started, duration, channelMode, format, mics }
+    private enum CodingKeys: String, CodingKey { case version, started, duration, channelMode, format, mics, audioStartHostTime, media }
 
     /// Tolerant of missing optional keys, so a hand-written or older file still yields its mic names.
     public init(from decoder: Decoder) throws {
@@ -43,6 +69,8 @@ public struct TakeMetadata: Codable, Sendable, Equatable {
         channelMode = try c.decodeIfPresent(String.self, forKey: .channelMode)
         format = try c.decodeIfPresent(String.self, forKey: .format) ?? "wav"
         mics = try c.decodeIfPresent([Mic].self, forKey: .mics) ?? []
+        audioStartHostTime = try c.decodeIfPresent(Double.self, forKey: .audioStartHostTime)
+        media = try c.decodeIfPresent([Media].self, forKey: .media)
     }
 
     public func write(to url: URL) throws {
@@ -70,6 +98,7 @@ public struct Take: Identifiable, Sendable, Equatable {
     }
     public var hasTranscript: Bool { FileManager.default.fileExists(atPath: transcriptURL.path) }
     public var audioFiles: [TakeFile] { descriptor.files.filter { [.stereo, .mix, .track].contains($0.role) } }
+    public var videoFiles: [TakeFile] { descriptor.files.filter { $0.kind == "video" } }
     public var allURLs: [URL] { descriptor.files.map { URL(fileURLWithPath: $0.path) } }
 }
 
@@ -110,6 +139,16 @@ public enum TakeLibrary {
             let ext = (name as NSString).pathExtension.lowercased()
             if name.hasSuffix(".take.json") {
                 files.append(TakeFile(path: path, role: .metadata))
+            } else if let media = metadata?.media?.first(where: { $0.file == name }) {
+                files.append(TakeFile(path: path, role: .capture, kind: media.kind, source: media.source, offset: media.offset))
+            } else if ["mov", "mp4", "m4v"].contains(ext) {
+                let base = (rest as NSString).deletingPathExtension
+                switch base {
+                case "Screen": files.append(TakeFile(path: path, role: .capture, kind: "video", source: "screen"))
+                case "Camera": files.append(TakeFile(path: path, role: .capture, kind: "video", source: "camera"))
+                case "PiP": files.append(TakeFile(path: path, role: .derived, kind: "video", source: "pip"))
+                default: files.append(TakeFile(path: path, role: .derived, kind: "video"))
+                }
             } else if ["wav", "m4a", "caf", "aif", "aiff"].contains(ext) {
                 let base = (rest as NSString).deletingPathExtension
                 if base == "Stereo" { files.append(TakeFile(path: path, role: .stereo)) }

@@ -10,6 +10,14 @@ public struct InstalledPlugin: Identifiable, Sendable, Equatable {
     public var executableURL: URL { folder.appendingPathComponent(manifest.executable) }
 
     public func handles(event: String) -> Bool { manifest.events?.contains(event) == true }
+
+    /// A post-job request in the protocol version this plugin declared, so older plugins keep working.
+    public func request(kind: String, name: String, take: TakeDescriptor, settings: [String: JSONValue]) -> PluginRequest {
+        var request = PluginRequest(kind: kind, name: name, take: take, settings: settings,
+                                    outputDirectory: take.folder, pluginDirectory: folder.path)
+        request.protocol = min(manifest.protocol, PluginProtocol.version)
+        return request
+    }
 }
 
 /// Finds plugins and keeps their enabled state and settings in the app's defaults domain, so the
@@ -40,8 +48,8 @@ public final class PluginStore: @unchecked Sendable {
             let folder = entry.resolvingSymlinksInPath()
             do {
                 let manifest = try PluginManifest.load(from: folder)
-                guard manifest.protocol == PluginProtocol.version else {
-                    problems.append("\(manifest.name): needs plugin protocol \(manifest.protocol), Lavdeck speaks \(PluginProtocol.version)")
+                guard PluginProtocol.supported.contains(manifest.protocol) else {
+                    problems.append("\(manifest.name): needs plugin protocol \(manifest.protocol), Lavdeck speaks up to \(PluginProtocol.version)")
                     continue
                 }
                 plugins.append(InstalledPlugin(folder: folder, manifest: manifest))
@@ -123,6 +131,8 @@ public enum PluginRunner {
     }
 
     private static let ignoreSIGPIPE: Void = { signal(SIGPIPE, SIG_IGN) }()
+    /// Shared with ``CaptureHost``: a plugin that exits early must not take Lavdeck down with SIGPIPE.
+    static var ignoreSIGPIPEOnce: Void { ignoreSIGPIPE }
 
     public static func run(_ plugin: InstalledPlugin, request: PluginRequest,
                            onMessage: @escaping @Sendable (PluginMessage) -> Void = { _ in }) async throws -> Result {

@@ -60,6 +60,20 @@ private struct GeneralSettings: View {
 private struct PluginSettings: View {
     @Environment(AppModel.self) private var model
 
+    static func permissionsLine(_ permissions: [String]?) -> String? {
+        let names = (permissions ?? []).map { p -> String in
+            switch p {
+            case "screen-recording": "screen recording"
+            case "camera": "camera"
+            case "microphone": "microphone"
+            case "network": "network access"
+            default: p
+            }
+        }
+        guard !names.isEmpty else { return nil }
+        return "Needs \(ListFormatter.localizedString(byJoining: names)) permission for Lavdeck"
+    }
+
     var body: some View {
         let host = model.plugins
         Form {
@@ -75,6 +89,9 @@ private struct PluginSettings: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(plugin.manifest.name).font(.headline)
                             if let summary = plugin.manifest.summary { Text(summary).font(.callout).foregroundStyle(.secondary) }
+                            if let needs = Self.permissionsLine(plugin.manifest.permissions) {
+                                Label(needs, systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary)
+                            }
                             Text("\(plugin.manifest.version) · \(plugin.id)").font(.caption).foregroundStyle(.tertiary)
                         }
                     }

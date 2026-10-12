@@ -39,6 +39,8 @@ final class PluginHost {
     }
 
     var enabledPlugins: [InstalledPlugin] { plugins.filter { store.isEnabled($0.id) } }
+    /// Enabled plugins that record alongside the audio.
+    var capturePlugins: [InstalledPlugin] { _ = settingsRevision; return enabledPlugins.filter(\.manifest.isCapture) }
     var runningJobs: [Job] { jobs.filter { $0.state == .running } }
 
     func isEnabled(_ plugin: InstalledPlugin) -> Bool { _ = settingsRevision; return store.isEnabled(plugin.id) }
@@ -90,8 +92,7 @@ final class PluginHost {
     func dismissFinished() { jobs.removeAll { $0.state != .running } }
 
     private func start(_ plugin: InstalledPlugin, kind: String, name: String, title: String, take: Take) {
-        let request = PluginRequest(kind: kind, name: name, take: take.descriptor, settings: store.settings(for: plugin),
-                                    outputDirectory: take.descriptor.folder, pluginDirectory: plugin.folder.path)
+        let request = plugin.request(kind: kind, name: name, take: take.descriptor, settings: store.settings(for: plugin))
         let job = Job(pluginID: plugin.id, pluginName: plugin.manifest.name, takeID: take.id, title: title)
         jobs.append(job)
         let id = job.id

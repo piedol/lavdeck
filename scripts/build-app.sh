@@ -21,10 +21,18 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1</string>
   <key>CFBundleVersion</key><string>${VERSION}</string>
-  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>LSUIElement</key><true/>
   <key>NSMicrophoneUsageDescription</key><string>Lavdeck records from your DJI Mic receiver.</string>
+  <key>NSCameraUsageDescription</key><string>Capture plugins you switch on can record your camera alongside the audio.</string>
 </dict></plist>
 PLIST
-codesign --force --sign - --timestamp=none "$APP"
-echo "built $APP"
+# Sign with a stable identity when one exists, so macOS keeps microphone, camera and screen recording
+# permissions across rebuilds (an ad-hoc signature changes every build and macOS forgets the grants).
+# Use LAVDECK_SIGN_IDENTITY, else a "Lavdeck Local Signing" certificate (see README), else ad-hoc.
+IDENTITY="${LAVDECK_SIGN_IDENTITY:-}"
+if [ -z "$IDENTITY" ] && security find-identity -p codesigning 2>/dev/null | grep -q '"Lavdeck Local Signing"'; then
+  IDENTITY="Lavdeck Local Signing"
+fi
+codesign --force --sign "${IDENTITY:--}" --timestamp=none "$APP"
+echo "built $APP (signed: ${IDENTITY:-ad-hoc})"
