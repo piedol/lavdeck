@@ -1,4 +1,6 @@
 import CoreGraphics
+import LavdeckCapture
+import LavdeckKit
 import AVFoundation
 import AppKit
 import SwiftUI
@@ -29,6 +31,23 @@ enum Snapshot {
                 let lines = NSApp.windows.map { "\(type(of: $0)) \($0.frame)" }.joined(separator: "\n")
                 try? lines.write(toFile: args[i + 1], atomically: true, encoding: .utf8)
                 NSApp.terminate(nil)
+            }
+            return
+        }
+        if let i = args.firstIndex(of: "--make-video"), i + 2 < args.count {
+            // Development aid: `--make-video <day folder> <stem>` writes that take's finished video, then quits.
+            Task { @MainActor in
+                guard let take = TakeLibrary.take(folder: URL(fileURLWithPath: args[i + 1]), stem: args[i + 2]) else {
+                    print("no take"); exit(1)
+                }
+                do {
+                    let url = try await VideoComposer.make(take.descriptor, settings: model.video) { _ in }
+                    print("made \(url.path)")
+                    exit(0)
+                } catch {
+                    print("failed: \(error)")
+                    exit(1)
+                }
             }
             return
         }

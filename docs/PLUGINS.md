@@ -194,14 +194,14 @@ Write next to the take, in `outputDirectory`, and name every file with the take'
 
 ## Capture plugins (protocol 2)
 
-A capture plugin records something alongside Lavdeck's audio, such as the screen or a webcam. Declare `"protocol": 2`, `"kind": "capture"` and a `capture` section:
+A capture plugin records something alongside Lavdeck's audio. Lavdeck records the screen and the built-in or default camera itself (**Settings › Video**), so a capture plugin is for other sources: a second camera, an iPhone, a feed from another app. Declare `"protocol": 2`, `"kind": "capture"` and a `capture` section:
 
 ```json
-"capture": { "arguments": ["--capture"], "sources": ["screen", "camera"] },
-"permissions": ["screen-recording", "camera"]
+"capture": { "arguments": ["--capture"], "sources": ["camera"] },
+"permissions": ["camera"]
 ```
 
-**Deck switches.** Give a source a `bool` setting with the same key (`"key": "screen"`) and Lavdeck shows it as an on/off button on the deck, under the MONO | STEREO switch, so people don't have to open Settings between takes. Clicking one on a switched-off plugin switches the plugin on with just that source. A plugin whose switches are all off isn't launched, and Lavdeck doesn't ask for the permission of a source that's off (it knows `screen` needs `screen-recording` and `camera` needs `camera`).
+**Deck switches.** Give a source a `bool` setting with the same key (`"key": "camera"`) and Lavdeck shows it as an on/off button on the deck, next to Lavdeck's own SCREEN and CAMERA, so people don't have to open Settings between takes. Clicking one on a switched-off plugin switches the plugin on with just that source. A plugin whose switches are all off isn't launched, and Lavdeck doesn't ask for the permission of a source that's off (it knows `screen` needs `screen-recording` and `camera` needs `camera`).
 
 When a recording starts, Lavdeck launches the capture executable (the manifest's `executable` unless `capture.executable` names another) with `capture.arguments`, and the two talk in JSON lines:
 

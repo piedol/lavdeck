@@ -24,7 +24,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>LSUIElement</key><true/>
   <key>NSMicrophoneUsageDescription</key><string>Lavdeck records from your DJI Mic receiver.</string>
-  <key>NSCameraUsageDescription</key><string>Capture plugins you switch on can record your camera alongside the audio.</string>
+  <key>NSCameraUsageDescription</key><string>Lavdeck records your camera alongside the mics when you switch CAMERA on.</string>
 </dict></plist>
 PLIST
 # Sign with a stable identity when one exists, so macOS keeps microphone, camera and screen recording

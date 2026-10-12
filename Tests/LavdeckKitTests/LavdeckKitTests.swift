@@ -1,6 +1,7 @@
 import Foundation
 import Synchronization
 import Testing
+import LavdeckCapture
 @testable import LavdeckKit
 
 private func bytes(_ hex: String) -> [UInt8] {
@@ -273,4 +274,21 @@ private let sampleRequest = PluginRequest(kind: "action", name: "go",
     #expect(!remake.applies(to: finishedOnly))
     #expect(anything.applies(to: audio))
     #expect(camera.has("camera") && !camera.has("screen"))
+}
+
+@Test func videoSettingsCarryOverFromTheScreenAndCameraPlugin() throws {
+    let defaults = try #require(UserDefaults(suiteName: "lavdeck.tests.video.\(UUID().uuidString)"))
+    // No plugin and nothing saved: video stays off.
+    #expect(LavdeckCapture.VideoSettings.load(defaults) == LavdeckCapture.VideoSettings())
+    defaults.set(["io.github.piedol.lavdeck.capture": true], forKey: "plugins.enabled")
+    defaults.set(["screen": false, "camera": true, "fps": 60.0, "pip_corner": "top-left", "camera_preview_size": "large"],
+                 forKey: "plugins.settings.io.github.piedol.lavdeck.capture")
+    let carried = LavdeckCapture.VideoSettings.load(defaults)
+    #expect(!carried.screen && carried.camera)
+    #expect(carried.screenFPS == 60 && carried.bubbleCorner == .topLeft && carried.previewSize == .large)
+    // Once saved, the built-in settings win.
+    var changed = carried
+    changed.screen = true
+    changed.save(defaults)
+    #expect(LavdeckCapture.VideoSettings.load(defaults).screen)
 }

@@ -1,4 +1,5 @@
 import AppKit
+import LavdeckCapture
 import LavdeckKit
 import LavdeckPluginKit
 import SwiftUI
@@ -7,6 +8,7 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralSettings().tabItem { Label("General", systemImage: "gearshape") }
+            VideoSettingsView().tabItem { Label("Video", systemImage: "video") }
             PluginSettings().tabItem { Label("Plugins", systemImage: "puzzlepiece.extension") }
         }
         .frame(width: 520)
@@ -54,6 +56,75 @@ private struct GeneralSettings: View {
         panel.canCreateDirectories = true
         panel.directoryURL = model.recordingsRoot
         if panel.runModal() == .OK, let url = panel.url { model.recordingsRoot = url }
+    }
+}
+
+/// Screen and camera recording, the camera preview and the finished video.
+private struct VideoSettingsView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        Form {
+            Section {
+                Toggle("Record the screen", isOn: Binding(get: { model.video.screen }, set: { model.setVideoSource("screen", $0) }))
+                Toggle("Record the camera", isOn: Binding(get: { model.video.camera }, set: { model.setVideoSource("camera", $0) }))
+                PermissionRow(permissions: ["screen-recording", "camera"], title: "Permissions")
+            } header: {
+                Text("Record with the mics")
+            } footer: {
+                Text("Also on the deck, as SCREEN and CAMERA. Lavdeck’s own windows and the camera preview are left out of the screen recording.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Camera preview") {
+                Toggle("Show a camera preview while recording", isOn: $model.video.cameraPreview)
+                Picker("Starts as", selection: $model.video.previewSize) {
+                    Text("Bubble").tag(VideoSettings.PreviewSize.bubble)
+                    Text("Large").tag(VideoSettings.PreviewSize.large)
+                    Text("Full screen").tag(VideoSettings.PreviewSize.full)
+                }
+                .disabled(!model.video.cameraPreview)
+                Text("Double-click the preview to switch between a bubble, a large view of the whole frame, and full screen.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            Section("Screen recording") {
+                Toggle("Also record system audio", isOn: $model.video.systemAudio)
+                    .help("Sound from apps (a video you’re demoing, a call) as a second audio track in the screen recording and the finished video.")
+                Picker("Frame rate", selection: $model.video.screenFPS) {
+                    Text("30 fps").tag(30)
+                    Text("60 fps").tag(60)
+                }
+                Picker("Video format", selection: $model.video.codec) {
+                    Text("HEVC (smaller files)").tag(VideoSettings.Codec.hevc)
+                    Text("H.264 (plays everywhere)").tag(VideoSettings.Codec.h264)
+                }
+            }
+            Section {
+                Toggle("Make a finished video after each take", isOn: $model.video.makeVideo)
+                Picker("Camera bubble position", selection: $model.video.bubbleCorner) {
+                    Text("Bottom right").tag(VideoSettings.Corner.bottomRight)
+                    Text("Bottom left").tag(VideoSettings.Corner.bottomLeft)
+                    Text("Top right").tag(VideoSettings.Corner.topRight)
+                    Text("Top left").tag(VideoSettings.Corner.topLeft)
+                }
+                Picker("Camera bubble size", selection: $model.video.bubbleSize) {
+                    Text("Small").tag(VideoSettings.BubbleSize.small)
+                    Text("Medium").tag(VideoSettings.BubbleSize.medium)
+                    Text("Large").tag(VideoSettings.BubbleSize.large)
+                }
+                Picker("Camera bubble shape", selection: $model.video.bubbleShape) {
+                    Text("Circle").tag(VideoSettings.BubbleShape.circle)
+                    Text("Rounded rectangle").tag(VideoSettings.BubbleShape.rounded)
+                }
+            } header: {
+                Text("Finished video")
+            } footer: {
+                Text("One MP4 per take: your screen with the camera in a corner (or the camera alone), and the mic audio. To apply new bubble settings to an earlier take, use Remake Video in Recordings.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(minHeight: 520)
     }
 }
 
@@ -182,11 +253,12 @@ private struct SettingRow: View {
 private struct PermissionRow: View {
     @Environment(AppModel.self) private var model
     let permissions: [String]
+    var title = "Uses Lavdeck’s"
 
     var body: some View {
         let center = model.permissions
         HStack(alignment: .firstTextBaseline, spacing: 14) {
-            Label("Uses Lavdeck’s", systemImage: "lock.shield").font(.callout).foregroundStyle(.secondary)
+            Label(title, systemImage: "lock.shield").font(.callout).foregroundStyle(.secondary)
             ForEach(permissions, id: \.self) { permission in
                 let state = center.state(permission)
                 HStack(spacing: 4) {

@@ -1,4 +1,5 @@
 import AppKit
+import LavdeckCapture
 import LavdeckKit
 import LavdeckPluginKit
 import Foundation
@@ -38,6 +39,8 @@ final class AppModel {
     var tapToRecord: Bool { didSet { defaults.set(tapToRecord, forKey: "tapToRecord"); restartButtons() } }
     /// Transmitters that record. One armed mic records alone (needs stereo); none disables Record.
     var armed: Set<Int> { didSet { defaults.set(Array(armed), forKey: "armed") } }
+    /// Screen and camera recording, the camera preview and the finished video.
+    var video: VideoSettings { didSet { video.save() } }
     /// User names for physical mics, keyed by Bluetooth ID so a name follows the mic, not the slot.
     var micNames: [String: String] { didSet { defaults.set(micNames, forKey: "micNames") } }
 
@@ -66,7 +69,9 @@ final class AppModel {
     private var currentStem: URL?
     private(set) var recordingMode: ChannelMode?
     private var recordingSolo: Int?
-    /// Capture plugins (screen, camera, …) recording alongside the current take.
+    /// Lavdeck's own screen and camera recording for the current take.
+    private var nativeCapture: VideoCapture?
+    /// Capture plugins (other video or audio sources) recording alongside the current take.
     private var capture: CaptureHost?
     private var captureStop: Task<(outputs: [CaptureOutput], problems: [CaptureHost.Problem]), Never>?
     /// Sources capture plugins have started for the current take, e.g. `screen`, `camera`.
@@ -80,6 +85,7 @@ final class AppModel {
             ?? home.appendingPathComponent("Recordings/Lavdeck", isDirectory: true)
         format = defaults.string(forKey: "format").flatMap(RecordingFormat.init(rawValue:)) ?? .wav
         splitTracks = defaults.object(forKey: "splitTracks") as? Bool ?? true
+        video = VideoSettings.load()
         tapToRecord = defaults.object(forKey: "tapToRecord") as? Bool ?? true
         armed = Set(defaults.array(forKey: "armed") as? [Int] ?? [1, 2])
         micNames = defaults.dictionary(forKey: "micNames") as? [String: String] ?? [:]
@@ -314,6 +320,32 @@ final class AppModel {
         }
     }
 
+    /// Switches Lavdeck's own screen or camera recording on or off for the next take.
+    func setVideoSource(_ source: String, _ on: Bool) {
+        switch source {
+        case "screen": video.screen = on
+        case "camera": video.camera = on
+        default: return
+        }
+        if on, let permission = PermissionCenter.permission(forSource: source) {
+            Task { await permissions.request([permission]) }
+        }
+    }
+
+    static let videoJobID = "lavdeck.video"
+
+    /// Makes (or remakes) each take's finished video, one at a time, as jobs in the Recordings window.
+    func makeVideo(for takes: [Take], automatic: Bool = false) {
+        let settings = video
+        for take in takes where take.descriptor.has("video") {
+            let descriptor = take.descriptor
+            plugins.runBuiltIn(id: Self.videoJobID, name: "Video", title: "Making the video", take: take, automatic: automatic) { progress in
+                let url = try await VideoComposer.make(descriptor, settings: settings) { progress($0, nil) }
+                return "Saved \(url.lastPathComponent)"
+            }
+        }
+    }
+
     func stopRecording() {
         guard isRecording else { return }
         stopCapture()
@@ -326,16 +358,25 @@ final class AppModel {
         let enabled = plugins.capturePlugins
         captureSources = []
         captureFailed = []
-        guard !enabled.isEmpty else { return [] }
+        var expected: Set<String> = []
+        if video.recordsVideo {
+            var needed: [String] = []
+            if video.screen { needed.append("screen-recording") }
+            if video.camera { needed.append("camera") }
+            await permissions.request(needed)
+            let granted = Set(permissions.granted(needed))
+            if let missing = needed.first(where: { !granted.contains($0) }) { lastError = Self.permissionMessage(missing) }
+            let native = VideoCapture { [weak self] in self?.nativeCaptureChanged() }
+            nativeCapture = native
+            expected = VideoCapture.expected(video, granted: granted)
+            await native.start(folder: folder, stem: stem, settings: video, granted: granted)
+        }
+        guard !enabled.isEmpty else { return expected }
         // Lavdeck asks for each permission once, for every plugin; plugins run under Lavdeck's grants.
         let needed = Array(Set(enabled.flatMap(plugins.neededPermissions)))
         await permissions.request(needed)
         let granted = Set(permissions.granted(needed))
-        if let missing = needed.first(where: { !granted.contains($0) }) {
-            lastError = missing == "screen-recording"
-                ? "Screen recording isn’t on for this Lavdeck yet. Turn on Lavdeck in System Settings › Privacy & Security › Screen & System Audio Recording, then quit and reopen Lavdeck (macOS applies it on relaunch)."
-                : "\(PermissionCenter.name(missing)) access is off for Lavdeck. Turn it on in System Settings › Privacy & Security."
-        }
+        if let missing = needed.first(where: { !granted.contains($0) }) { lastError = Self.permissionMessage(missing) }
         let host = CaptureHost { [weak self] plugin, event in
             Task { @MainActor in self?.captureEvent(plugin, event) }
         }
@@ -343,20 +384,36 @@ final class AppModel {
                                   take: CaptureTake(folder: folder.path, stem: stem), granted: granted)
         if let problem = problems.first { lastError = "\(problem.pluginName): \(problem.message)" }
         capture = host.isRunning ? host : nil
-        guard capture != nil else { return [] }
+        guard capture != nil else { return expected }
         let toggles = plugins.captureToggles
-        return Set(enabled.flatMap { plugin -> [String] in
+        return expected.union(enabled.flatMap { plugin -> [String] in
             let own = toggles.filter { $0.plugin.id == plugin.id }
             let sources = own.isEmpty ? (plugin.manifest.capture?.sources ?? []) : own.filter(plugins.isOn).map(\.source)
             return sources.filter { source in PermissionCenter.permission(forSource: source).map(granted.contains) ?? true }
         })
     }
 
+    private static func permissionMessage(_ missing: String) -> String {
+        missing == "screen-recording"
+            ? "Screen recording isn’t on for this Lavdeck yet. Turn on Lavdeck in System Settings › Privacy & Security › Screen & System Audio Recording, then quit and reopen Lavdeck (macOS applies it on relaunch)."
+            : "\(PermissionCenter.name(missing)) access is off for Lavdeck. Turn it on in System Settings › Privacy & Security."
+    }
+
+    /// Mirrors the built-in recorder's started and failed sources into the deck's state.
+    private func nativeCaptureChanged() {
+        guard let native = nativeCapture else { return }
+        for source in native.started where !captureSources.contains(source) { captureSources.append(source) }
+        for (source, message) in native.failed where !captureFailed.contains(source) {
+            captureFailed.insert(source)
+            lastError = message
+        }
+    }
+
     /// Waits until every expected source has written its first frame (or failed), at most `timeout` seconds.
     private func waitForCapture(_ expected: Set<String>, timeout: Double) async {
         guard !expected.isEmpty else { return }
         let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline, capture != nil,
+        while Date() < deadline, capture != nil || nativeCapture != nil,
               !expected.isSubset(of: Set(captureSources).union(captureFailed)) {
             try? await Task.sleep(for: .milliseconds(20))
         }
@@ -374,9 +431,16 @@ final class AppModel {
     }
 
     private func stopCapture() {
-        guard let host = capture, captureStop == nil else { return }
+        guard capture != nil || nativeCapture != nil, captureStop == nil else { return }
+        let host = capture, native = nativeCapture
         capture = nil
-        captureStop = Task.detached { await host.stop() }
+        nativeCapture = nil
+        captureStop = Task { @MainActor in
+            async let fromPlugins = host?.stop()
+            let fromLavdeck = await native?.stop()
+            let plugins = await fromPlugins
+            return ((fromLavdeck?.outputs ?? []) + (plugins?.outputs ?? []), (fromLavdeck?.problems ?? []) + (plugins?.problems ?? []))
+        }
     }
 
     private func recordingFinished(_ url: URL, error: Error?) {
@@ -436,6 +500,7 @@ final class AppModel {
             try? metadata.write(to: folder.appendingPathComponent("\(stemName).take.json"))
             if let take = TakeLibrary.take(folder: folder, stem: stemName, micNames: micNames) {
                 plugins.takeFinished(take)
+                if video.makeVideo { makeVideo(for: [take], automatic: true) }
             }
             libraryRevision += 1
             takeSaved()
@@ -510,7 +575,7 @@ final class AppModel {
             recordingMode = .stereo
             recordingStarted = Date().addingTimeInterval(-767)
             recordingLevels = [-14, -21]
-            captureSources = plugins.captureToggles.filter(plugins.isOn).map(\.source)
+            captureSources = [video.screen ? "screen" : nil, video.camera ? "camera" : nil].compactMap { $0 }
         } else {
             isRecording = false
             recordingStarted = nil
