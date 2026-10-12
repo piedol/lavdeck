@@ -65,7 +65,9 @@ struct PopoverView: View {
             } else if model.isStarting {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.mini)
-                    let on = model.plugins.captureToggles.filter(model.plugins.isOn).map { CaptureSwitch.title($0.source).lowercased() }
+                    let on = ([model.video.camera ? "camera" : nil, model.video.screen ? "screen" : nil].compactMap { $0 }
+                              + model.plugins.captureToggles.filter(model.plugins.isOn).map(\.source))
+                        .map { CaptureSwitch.title($0).lowercased() }
                     Text(on.isEmpty ? "Starting…" : "Starting \(on.joined(separator: " and "))…")
                         .font(Theme.label).foregroundStyle(Theme.mute)
                 }
@@ -338,18 +340,21 @@ private struct MasterSection: View {
             let toggles = model.plugins.captureToggles
             // The capture row takes its height from the fader so the section still lines up with the strips.
             GainFader(steps: [-12, -6, 0, 6, 12], value: model.displayedGain, pending: model.pendingGain != nil,
-                      onSet: model.setGain, height: model.isRecording ? 84 : toggles.isEmpty ? 132 : 96)
+                      onSet: model.setGain, height: model.isRecording ? 84 : 96)
             ModeSwitch(mode: display(model.displayedChannel), disabled: model.isRecording || model.pendingChannel != nil) { stereo in
                 model.setChannel(stereo ? .stereo : .mono)
             }
             .help(model.isRecording ? "Stop recording to change the channel mode" : "Mono mixes both mics; stereo puts TX1 left and TX2 right")
-            if !toggles.isEmpty {
-                CaptureSwitch(items: toggles.map { toggle in
-                    .init(id: toggle.id, source: toggle.source, on: model.plugins.isOn(toggle),
-                          live: model.captureSources.contains(toggle.source))
-                }, locked: model.isRecording) { item, on in
-                    if let toggle = toggles.first(where: { $0.id == item.id }) { model.setCapture(toggle, on) }
-                }
+            // Lavdeck's own screen and camera, then any capture plugin's sources.
+            let native: [CaptureSwitch.Item] = [("screen", model.video.screen), ("camera", model.video.camera)].map { source, on in
+                .init(id: "lavdeck/\(source)", source: source, on: on, live: model.captureSources.contains(source))
+            }
+            CaptureSwitch(items: native + toggles.map { toggle in
+                .init(id: toggle.id, source: toggle.source, on: model.plugins.isOn(toggle),
+                      live: model.captureSources.contains(toggle.source))
+            }, locked: model.isRecording) { item, on in
+                if item.id.hasPrefix("lavdeck/") { model.setVideoSource(item.source, on) }
+                else if let toggle = toggles.first(where: { $0.id == item.id }) { model.setCapture(toggle, on) }
             }
             RecordButton(recording: model.isRecording, disabled: !model.isRecording && model.armed.isEmpty,
                          action: model.toggleRecording)

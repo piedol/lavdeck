@@ -37,14 +37,25 @@ final class PluginHost {
 
     let store = PluginStore(defaults: .standard)
     private var tasks: [UUID: Task<Void, Never>] = [:]
-    /// Requests for queued jobs, started in order as the plugin's running job finishes.
-    private var queued: [UUID: (plugin: InstalledPlugin, request: PluginRequest)] = [:]
+    /// Work for queued jobs, started in order as the same plugin's (or built-in's) running job finishes.
+    private var queued: [UUID: Work] = [:]
+
+    /// A plugin process to run, or work Lavdeck does itself (making a take's video) that shows up as a job.
+    enum Work {
+        case plugin(InstalledPlugin, PluginRequest)
+        case builtIn(BuiltInWork)
+    }
+    /// Reports progress (0...1) and an optional message; returns a short note for the finished job.
+    typealias BuiltInWork = @Sendable (_ progress: @escaping @Sendable (Double, String?) -> Void) async throws -> String?
+
+    /// Plugins Lavdeck has absorbed. A copy still installed is ignored, so it can't run twice.
+    static let builtIn: Set<String> = ["io.github.piedol.lavdeck.capture"]
 
     init() { reload() }
 
     func reload() {
         let found = store.discover()
-        plugins = found.plugins
+        plugins = found.plugins.filter { !Self.builtIn.contains($0.id) }
         problems = found.problems
     }
 
@@ -170,11 +181,6 @@ final class PluginHost {
         return mine.last { newest[$0.pluginID] == $0.id && $0.failure != nil && !$0.dismissed }
     }
 
-    /// The enabled plugin that makes a kind of output for takes, e.g. `video` or `transcript`.
-    func plugin(producing kind: String) -> InstalledPlugin? {
-        enabledPlugins.first { $0.manifest.produces?.contains(kind) == true }
-    }
-
     /// Cancels everything running or queued for these takes (before they go to the Trash).
     func cancelJobs(for takeIDs: Set<String>) {
         for job in jobs where takeIDs.contains(job.takeID) && [.running, .queued].contains(job.state) { cancel(job) }
@@ -219,27 +225,63 @@ final class PluginHost {
             job.state = .queued
             job.message = "Queued"
             jobs.append(job)
-            queued[job.id] = (plugin, request)
+            queued[job.id] = .plugin(plugin, request)
             return
         }
         jobs.append(job)
-        launch(job.id, plugin, request)
+        launch(job.id, .plugin(plugin, request))
     }
 
-    private func launch(_ id: UUID, _ plugin: InstalledPlugin, _ request: PluginRequest) {
+    /// Runs Lavdeck's own work on a take as a job: queued behind the same `id`'s running job, with progress,
+    /// cancel and failure shown like a plugin's. `id` and `name` stand in for a plugin's.
+    func runBuiltIn(id: String, name: String, title: String, take: Take, automatic: Bool, work: @escaping BuiltInWork) {
+        guard job(for: take.id, plugin: id) == nil else { return }
+        var job = Job(pluginID: id, pluginName: name, takeID: take.id, title: title, automatic: automatic)
+        if jobs.contains(where: { $0.pluginID == id && [.running, .queued].contains($0.state) }) {
+            job.state = .queued
+            job.message = "Queued"
+            jobs.append(job)
+            queued[job.id] = .builtIn(work)
+            return
+        }
+        jobs.append(job)
+        launch(job.id, .builtIn(work))
+    }
+
+    private func launch(_ id: UUID, _ work: Work) {
         if let i = jobs.firstIndex(where: { $0.id == id }) { jobs[i].state = .running; jobs[i].message = nil }
-        tasks[id] = Task { [weak self] in
-            do {
-                let result = try await PluginRunner.run(plugin, request: request) { message in
-                    Task { @MainActor in self?.update(id, with: message) }
+        switch work {
+        case .plugin(let plugin, let request):
+            tasks[id] = Task { [weak self] in
+                do {
+                    let result = try await PluginRunner.run(plugin, request: request) { message in
+                        Task { @MainActor in self?.update(id, with: message) }
+                    }
+                    self?.finish(id, .finished(result.outputs.isEmpty ? nil : "\(result.outputs.count) file(s)"))
+                } catch PluginRunError.cancelled {
+                    self?.finish(id, .failed("Cancelled"))
+                } catch {
+                    self?.finish(id, .failed("\(error)"))
                 }
-                self?.finish(id, .finished(result.outputs.isEmpty ? nil : "\(result.outputs.count) file(s)"))
-            } catch PluginRunError.cancelled {
-                self?.finish(id, .failed("Cancelled"))
-            } catch {
-                self?.finish(id, .failed("\(error)"))
+            }
+        case .builtIn(let run):
+            tasks[id] = Task { [weak self] in
+                do {
+                    let note = try await run { fraction, message in
+                        Task { @MainActor in self?.progress(id, fraction, message) }
+                    }
+                    self?.finish(id, Task.isCancelled ? .failed("Cancelled") : .finished(note))
+                } catch {
+                    self?.finish(id, .failed(Task.isCancelled || error is CancellationError ? "Cancelled" : "\(error)"))
+                }
             }
         }
+    }
+
+    private func progress(_ id: UUID, _ fraction: Double, _ message: String?) {
+        guard let i = jobs.firstIndex(where: { $0.id == id }), jobs[i].state == .running else { return }
+        jobs[i].fraction = fraction
+        if let message { jobs[i].message = message }
     }
 
     private func update(_ id: UUID, with message: PluginMessage) {
@@ -261,8 +303,8 @@ final class PluginHost {
         if case .finished(let note) = state { jobs[i].fraction = 1; jobs[i].message = jobs[i].message ?? note }
         outputsRevision += 1
         let pluginID = jobs[i].pluginID
-        if let next = jobs.first(where: { $0.pluginID == pluginID && $0.state == .queued }), let item = queued.removeValue(forKey: next.id) {
-            launch(next.id, item.plugin, item.request)
+        if let next = jobs.first(where: { $0.pluginID == pluginID && $0.state == .queued }), let work = queued.removeValue(forKey: next.id) {
+            launch(next.id, work)
         }
     }
 }

@@ -50,8 +50,8 @@ Lavdeck talks to the receiver directly over USB. Plug it into your Mac and withi
 - **Takes survive quitting:** quit Lavdeck mid‑take (or let macOS "Quit & Reopen" it after a permission change) and the take is stopped and saved first.
 - **Recordings window:** every take in one list, with the first words of its transcript and a badge when it has video. Filter, sort and search by words, mic names or date. Watch a take's video right there (or its raw screen or camera recording with the mic audio lined up), scrub its audio, follow along in the transcript and click any line to jump there. Drag a file out to another app, share the take, or move it to the Trash with all its files.
 - **Work on many takes at once:** ⌘-click, ⇧-click a range or ⌘A, then transcribe them (or just the ones without a transcript), copy their transcripts as text, show them in Finder or move them to the Trash. Plugin jobs queue and run one take at a time.
-- **Plugins:** add what happens alongside or after a recording, such as transcripts, screen and camera capture, or an editor, written in any language. See [Plugins](#plugins).
-- **Screen and camera in one click:** with a capture plugin installed, SCREEN and CAMERA buttons on the deck choose what records with the next take, no trip to Settings.
+- **Screen and camera:** record your screen, your camera, or both, with the mics. SCREEN and CAMERA on the deck pick what records with the next take. Video starts before the audio, so every take has picture from its first second, and each file lines up with the mics to the frame. A live camera preview floats while you record (double-click it for a large view or full screen) and stays out of the screen recording. After each take Lavdeck makes a finished video: your screen with the camera in a corner, and the mic audio. The camera records at its full resolution. Options are in **Settings › Video**.
+- **Plugins:** add what happens alongside or after a recording, such as transcripts or an editor, written in any language. See [Plugins](#plugins).
 - **A menu bar icon that tells you what's wrong** before you open anything:
 
 <p align="center">
@@ -127,7 +127,7 @@ swift build -c release
 Plugins add steps that run after a take is recorded, never during it, so they can't cost you a recording. A plugin is a folder with a small `plugin.json` and a program in any language. Lavdeck sends it the take as JSON and shows the plugin's progress in the menu bar and the Recordings window. Its settings appear in **Settings › Plugins**, and its actions appear on every take in the Recordings window.
 
 - **Events:** run automatically when a recording finishes, for example to transcribe every take.
-- **Capture:** record alongside the mic, for example the screen and a webcam. Lavdeck notes when each file's first frame happened relative to the audio, so every file lines up to the frame.
+- **Capture:** record another source alongside the mic (Lavdeck records the screen and camera itself). Lavdeck notes when each file's first frame happened relative to the audio, so every file lines up to the frame.
 - **Actions:** run on demand on any take, old or new, for example **Generate transcript**.
 - **Apps:** a plugin can ship a companion app, such as an editor; every take gets an **Open in …** button.
 - **Shared formats:** a plugin that writes the standard transcript JSON gets search, speaker names and click-to-play in the Recordings window for free.
@@ -162,7 +162,8 @@ The receiver speaks DJI's DUML protocol on a vendor USB interface alongside its 
 ```
 Sources/LavdeckKit        USB link, DUML framing, status decoder, allowlisted commands, recorder, take library, plugin and capture runners
 Sources/LavdeckPluginKit  plugin protocol (post, capture and app plugins) and transcript types, usable by Swift plugins
-Sources/LavdeckApp        SwiftUI menu bar app, Recordings window, plugin settings and permissions
+Sources/LavdeckCapture    screen and camera recording, the camera preview, and each take's finished video
+Sources/LavdeckApp        SwiftUI menu bar app, Recordings window, settings and permissions
 Sources/lavdeck           command-line tool
 Examples/plugins          example plugin with a Python helper
 Tests                     decoder and framing tests on captured frames; take library, plugin, capture and app-plugin tests

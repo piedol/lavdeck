@@ -209,7 +209,15 @@ struct RecordingsView: View {
                     let fit = chosen.filter { item.action.applies(to: $0.descriptor) }
                     return fit.isEmpty ? nil : ApplicableAction(plugin: item.plugin, action: item.action, takes: fit)
                 }
-                if !actions.isEmpty { Divider() }
+                let videoTakes = chosen.filter { $0.descriptor.has("video") }
+                if !actions.isEmpty || !videoTakes.isEmpty { Divider() }
+                if !videoTakes.isEmpty {
+                    let busy = videoTakes.allSatisfy { model.plugins.job(for: $0.id, plugin: AppModel.videoJobID) != nil }
+                    Button("Remake Video" + (busy ? " (in progress)" : chosen.count > 1 ? " (\(videoTakes.count))" : "")) {
+                        model.makeVideo(for: videoTakes)
+                    }
+                    .disabled(busy)
+                }
                 ForEach(actions) { entry in
                     let busy = entry.takes.allSatisfy { model.plugins.job(for: $0.id, plugin: entry.plugin.id) != nil }
                     Button(entry.action.title + (busy ? " (in progress)" : chosen.count > 1 ? " (\(entry.takes.count))" : "")) {
@@ -416,11 +424,9 @@ private struct TakeDetail: View {
     @State private var currentSegmentID: TranscriptDocument.Segment.ID?
 
     private var media: [TakeMedia] { TakeMedia.all(in: take) }
-    private var videoPlugin: InstalledPlugin? { model.plugins.plugin(producing: "video") }
-    private var videoJob: PluginHost.Job? { videoPlugin.flatMap { model.plugins.job(for: take.id, plugin: $0.id) } }
-    private var remakeAction: (plugin: InstalledPlugin, action: PluginAction)? {
-        model.plugins.actions(for: take).first { $0.plugin.id == videoPlugin?.id }
-    }
+    private var videoJob: PluginHost.Job? { model.plugins.job(for: take.id, plugin: AppModel.videoJobID) }
+    /// The finished video can be (re)made when the take has a screen or camera recording.
+    private var canMakeVideo: Bool { take.descriptor.has("video") }
     private var transcribeAction: (plugin: InstalledPlugin, action: PluginAction)? {
         model.plugins.actions(for: take).first { $0.plugin.manifest.produces?.contains("transcript") == true }
     }
@@ -555,7 +561,12 @@ private struct TakeDetail: View {
                     }
                 }
                 let actions = model.plugins.actions(for: take)
-                if !actions.isEmpty { Divider() }
+                if canMakeVideo || !actions.isEmpty { Divider() }
+                if canMakeVideo {
+                    Button(videoJob != nil ? "Remake Video (in progress)" : "Remake Video") { model.makeVideo(for: [take]) }
+                        .disabled(videoJob != nil)
+                        .help("Rebuild the finished video from the screen and camera recordings, with your current camera bubble settings")
+                }
                 ForEach(actions, id: \.action.id) { item in
                     let busy = model.plugins.job(for: take.id, plugin: item.plugin.id) != nil
                     Button(item.action.title + (busy ? " (in progress)" : "")) { model.plugins.run(item.action, of: item.plugin, on: take) }
@@ -604,14 +615,14 @@ private struct TakeDetail: View {
                 Spacer()
                 Button("Cancel") { model.plugins.cancel(job) }.controlSize(.small)
             }
-        } else if let failed = videoPlugin.flatMap({ model.plugins.failure(for: take.id, plugin: $0.id) }) {
+        } else if let failed = model.plugins.failure(for: take.id, plugin: AppModel.videoJobID) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warnText)
                 Text("The video couldn’t be made: \(failed.failure ?? "")").font(.callout).foregroundStyle(Theme.warnText)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                if let remake = remakeAction {
-                    Button("Try Again") { model.plugins.run(remake.action, of: remake.plugin, on: take) }.controlSize(.small)
+                if canMakeVideo {
+                    Button("Try Again") { model.makeVideo(for: [take]) }.controlSize(.small)
                 }
                 Button { model.plugins.dismiss(failed) } label: { Image(systemName: "xmark") }
                     .buttonStyle(.plain).foregroundStyle(.secondary).help("Dismiss")
@@ -621,8 +632,8 @@ private struct TakeDetail: View {
                 Text("This take has no finished video yet, so this is the raw recording with the mic audio.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Spacer()
-                if let remake = remakeAction {
-                    Button("Make Video") { model.plugins.run(remake.action, of: remake.plugin, on: take) }.controlSize(.small)
+                if canMakeVideo {
+                    Button("Make Video") { model.makeVideo(for: [take]) }.controlSize(.small)
                 }
             }
         } else if player.media?.kind == .video {
@@ -907,6 +918,15 @@ private struct SelectionDetail: View {
                 if let item = transcribeAction, !untranscribed.isEmpty, untranscribed.count < takes.count {
                     ActionRow(title: "Transcribe the \(untranscribed.count) without a transcript", symbol: "text.quote") {
                         model.plugins.run(item.action, of: item.plugin, on: untranscribed)
+                    }
+                    Divider().padding(.leading, 36)
+                }
+                let videoTakes = takes.filter { $0.descriptor.has("video") }
+                if !videoTakes.isEmpty {
+                    ActionRow(title: "Remake video",
+                              detail: videoTakes.count == takes.count ? "All \(takes.count)" : "\(videoTakes.count) of \(takes.count)",
+                              symbol: "film") {
+                        model.makeVideo(for: videoTakes)
                     }
                     Divider().padding(.leading, 36)
                 }

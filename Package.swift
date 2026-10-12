@@ -15,9 +15,17 @@ let package = Package(
             .linkedFramework("IOKit"), .linkedFramework("IOUSBHost"), .linkedFramework("AVFoundation"),
         ]),
         .executableTarget(name: "lavdeck", dependencies: ["LavdeckKit"]),
-        .executableTarget(name: "LavdeckApp", dependencies: ["LavdeckKit"], linkerSettings: [
+        // Screen and camera recording, the camera preview and each take's finished video. Swift 5 mode: it
+        // wraps AVFoundation and ScreenCaptureKit delegate callbacks that predate strict concurrency.
+        .target(name: "LavdeckCapture", dependencies: ["LavdeckKit", "LavdeckPluginKit"],
+                swiftSettings: [.swiftLanguageMode(.v5)],
+                linkerSettings: [
+                    .linkedFramework("ScreenCaptureKit"), .linkedFramework("AVFoundation"),
+                    .linkedFramework("CoreImage"), .linkedFramework("AppKit"),
+                ]),
+        .executableTarget(name: "LavdeckApp", dependencies: ["LavdeckKit", "LavdeckCapture"], linkerSettings: [
             .linkedFramework("Carbon"), .linkedFramework("ServiceManagement"),
         ]),
-        .testTarget(name: "LavdeckKitTests", dependencies: ["LavdeckKit", "LavdeckPluginKit"]),
+        .testTarget(name: "LavdeckKitTests", dependencies: ["LavdeckKit", "LavdeckPluginKit", "LavdeckCapture"]),
     ]
 )

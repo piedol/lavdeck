@@ -9,6 +9,14 @@ public struct CaptureOutput: Sendable, Equatable {
     public var kind: String
     /// Host-clock seconds of the file's first frame.
     public var startHostTime: Double?
+
+    public init(pluginID: String, path: String, source: String, kind: String, startHostTime: Double?) {
+        self.pluginID = pluginID
+        self.path = path
+        self.source = source
+        self.kind = kind
+        self.startHostTime = startHostTime
+    }
 }
 
 /// Runs every enabled capture plugin for one recording: start them together, stop them together,
@@ -17,6 +25,10 @@ public final class CaptureHost: @unchecked Sendable {
     public struct Problem: Sendable, Equatable {
         public var pluginName: String
         public var message: String
+        public init(pluginName: String, message: String) {
+            self.pluginName = pluginName
+            self.message = message
+        }
     }
 
     private final class Running {
