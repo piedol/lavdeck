@@ -15,3 +15,6 @@ PRODUCT.md
 
 # Private plugin repos (each is its own git repository)
 /plugins/
+
+# Local code-signing choice (see README)
+.signing-identity

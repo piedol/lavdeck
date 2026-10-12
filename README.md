@@ -82,7 +82,7 @@ security import /tmp/lavdeck.p12 -k ~/Library/Keychains/login.keychain-db -P lav
 rm /tmp/lavdeck.key /tmp/lavdeck.p12
 ```
 
-Or set `LAVDECK_SIGN_IDENTITY` to any code-signing identity you already have. The certificate stays on your Mac and is only used to sign your own build.
+Or set `LAVDECK_SIGN_IDENTITY` (or put the name in a git-ignored `.signing-identity` file) to any code-signing identity you already have. macOS is most reliable about screen recording permission with a trusted identity such as an Apple Development or Developer ID certificate. The certificate stays on your Mac and is only used to sign your own build.
 
 Plug in the receiver (a USB hub must carry data, not just power) and click the icon in the menu bar. macOS asks for microphone access the first time you record.
 

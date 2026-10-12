@@ -31,6 +31,8 @@ PLIST
 # permissions across rebuilds (an ad-hoc signature changes every build and macOS forgets the grants).
 # Use LAVDECK_SIGN_IDENTITY, else a "Lavdeck Local Signing" certificate (see README), else ad-hoc.
 IDENTITY="${LAVDECK_SIGN_IDENTITY:-}"
+# A git-ignored .signing-identity file (one line: identity name or SHA-1) sets a default for this checkout.
+if [ -z "$IDENTITY" ] && [ -f .signing-identity ]; then IDENTITY="$(head -1 .signing-identity)"; fi
 if [ -z "$IDENTITY" ] && security find-identity -p codesigning 2>/dev/null | grep -q '"Lavdeck Local Signing"'; then
   IDENTITY="Lavdeck Local Signing"
 fi
