@@ -103,20 +103,25 @@ struct LEDMeter: View {
 /// DJI reports battery as 0-7; shown as seven cells and labelled as an estimate.
 struct BatteryCells: View {
     let level: Int?
+    var charging = false
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(0..<7, id: \.self) { i in
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(level.map { i < $0 } == true ? Theme.ink : Theme.ledOff)
+                    .fill(level.map { i < $0 } == true ? (charging ? Theme.green : Theme.ink) : Theme.ledOff)
                     .frame(width: 5, height: 10)
             }
-            Text("est").font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.mute).padding(.leading, 2)
+            if charging {
+                Image(systemName: "bolt.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.green).padding(.leading, 2)
+            } else {
+                Text("est").font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.mute).padding(.leading, 2)
+            }
         }
-        .help(level.map { "Battery \($0) of 7 (receiver estimate)" } ?? "Battery unknown")
+        .help(level.map { "Battery \($0) of 7 (receiver estimate)\(charging ? ", charging" : "")" } ?? "Battery unknown")
         .accessibilityElement()
         .accessibilityLabel("Battery")
-        .accessibilityValue(level.map { "\($0) of 7, estimate" } ?? "unknown")
+        .accessibilityValue(level.map { "\($0) of 7, estimate\(charging ? ", charging" : "")" } ?? "unknown")
     }
 }
 
