@@ -30,15 +30,15 @@ Lavdeck talks to the receiver directly over USB. Plug it into your Mac and withi
 ## What it does
 
 <p align="center">
-  <img src="docs/images/popover-light.png" alt="Lavdeck idle: strips named Host and Guest with link lights, level meters, battery (Guest charging) and firmware, plus gain fader, mono/stereo switch and noise cancel set to High" width="32%">
+  <img src="docs/images/popover-light.png" alt="Lavdeck idle: strips named Host and Guest with link lights, level meters, charging state (Guest charging) and firmware, plus gain fader, mono/stereo switch and noise cancel set to High" width="32%">
   &nbsp;
   <img src="docs/images/identify-light.png" alt="Which mic is which? Host's strip lights up while Host talks, with a banner saying That's Host (TX1)" width="32%">
   &nbsp;
   <img src="docs/images/recording-dark.png" alt="Lavdeck recording in stereo, dark appearance: elapsed time in the header and each strip names the file it is writing" width="32%">
-  <br><sub>Named mics with battery and charging · finding which mic is which · recording in stereo</sub>
+  <br><sub>Named mics with charging state · finding which mic is which · recording in stereo</sub>
 </p>
 
-- **Live status for every mic:** link light, level meter, battery estimate, a ⚡ while it charges, and firmware for TX1 and TX2, straight from the receiver.
+- **Live status for every mic:** link light, level meter, whether it's charging, and firmware for TX1 and TX2, straight from the receiver.
 - **Noise cancelling at a glance:** shows whether the receiver's switch is on Off, Low or High.
 - **Mono / stereo** with one click. In stereo, TX1 is left and TX2 is right.
 - **Receiver gain** on a five‑detent fader: −12, −6, 0, +6, +12 dB.
@@ -50,12 +50,11 @@ Lavdeck talks to the receiver directly over USB. Plug it into your Mac and withi
 - **Takes survive quitting:** quit Lavdeck mid‑take (or let macOS "Quit & Reopen" it after a permission change) and the take is stopped and saved first.
 - **Recordings window:** every take in one list. Filter, sort and search, including inside transcripts. Play from any line of a transcript, and move a take to the Trash with all its files.
 - **Plugins:** add what happens alongside or after a recording, such as transcripts, screen and camera capture, or an editor, written in any language. See [Plugins](#plugins).
-- **Battery history:** every change in a mic's battery estimate or charging state is logged to `~/Library/Logs/Lavdeck/battery.log`, so you can see how long a charge lasts.
 - **A menu bar icon that tells you what's wrong** before you open anything:
 
 <p align="center">
   <img src="docs/images/menu-bar-states.png" alt="Menu bar icon states on light and dark menu bars: healthy, recording, mic disconnected, low battery, error, receiver not connected" width="70%">
-  <br><sub>Healthy · recording · a mic dropped · low battery · error · no receiver (light and dark menu bars)</sub>
+  <br><sub>Healthy · recording · a mic dropped · low battery (for receivers that report it) · error · no receiver (light and dark menu bars)</sub>
 </p>
 
 <p align="center">
@@ -99,7 +98,7 @@ Plug in the receiver (a USB hub must carry data, not just power) and click the i
 | Switch mono / stereo | Click **MONO** or **STEREO** in the popover |
 | Change gain | Drag the fader or click a value |
 | Tell the mics apart | **Which mic is which?**, then talk into one; click a strip's name to label it |
-| Check battery and charging | The cells under each meter (0–7 estimate); ⚡ while charging. History in `~/Library/Logs/Lavdeck/battery.log` |
+| See if a mic is charging | Under each meter: ⚡ Charging or On battery |
 | Record only one mic | Click **ARMED** on the other strip to turn it **OFF** |
 | Start / stop recording | **Record**, <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd>, or tap a mic's link button |
 | Find your takes | Click the format label in the popover to open **Recordings**, or look in `~/Recordings/Lavdeck/<date>/` |
@@ -114,7 +113,7 @@ There's also a small command‑line tool for scripting and debugging:
 
 ```bash
 swift build -c release
-.build/release/lavdeck status --json    # live status, read-only (battery, charging, levels)
+.build/release/lavdeck status --json    # live status, read-only (charging, levels, settings)
 .build/release/lavdeck set channel stereo
 .build/release/lavdeck takes             # list recorded takes
 .build/release/lavdeck plugins           # list installed plugins
@@ -144,7 +143,7 @@ Start from [`Examples/plugins/take-info`](Examples/plugins/take-info), which inc
 
 **Known limits**
 
-- Battery is DJI's own 0–7 estimate, shown as such; there's no finer percentage to read. Charging is what each mic reports, and a mic that was just in use can take a few minutes to start charging.
+- **No battery level.** The Mobile RX passes on whether each mic is charging, but not how full it is: its battery field stays at the same placeholder whether a mic is empty or full. DJI Mimo reads the level from the mic directly over Bluetooth. A mic that was just in use can take a few minutes to start charging.
 - In mono the receiver mixes both mics, so each strip shows the mixed level (labelled **mono mix**). Switch to stereo to see each mic's own level.
 - The receiver accepts a per‑mic mute but doesn't act on it, so Lavdeck records one mic by keeping only its channel instead.
 - The Mac can't tell which mic's button was tapped; either one toggles recording.

@@ -259,7 +259,7 @@ private struct ChannelStrip: View {
                 .help(!armed ? "Not armed: this mic is left out of recordings"
                       : model.metersAreMix ? "Mono mixes both mics, so this shows the mix. Switch to stereo for each mic’s own level."
                       : "This mic’s level, reported by the receiver")
-            BatteryCells(level: linked ? tx?.batteryLevel : nil, charging: linked && tx?.isCharging == true)
+            ChargeState(charging: linked ? tx?.isCharging : nil)
             Group {
                 if model.isRecording, !armed {
                     Text("not rec")
