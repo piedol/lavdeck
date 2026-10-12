@@ -178,6 +178,7 @@ struct RecordingsView: View {
 
 private struct TakeDetail: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openSettings) private var openSettings
     let take: Take
     let transcript: TranscriptDocument?
     let search: String
@@ -291,7 +292,7 @@ private struct TakeDetail: View {
                     } else {
                         Text("Turn on a transcription plugin in Settings › Plugins to transcribe recordings.")
                             .font(.callout).foregroundStyle(.secondary)
-                        SettingsLink { Text("Open Settings") }
+                        Button("Open Settings") { NSApp.activate(); openSettings() }
                     }
                 }
                 .padding(12)
