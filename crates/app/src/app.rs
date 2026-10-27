@@ -13,7 +13,7 @@ use objc2_app_kit::{
 };
 use objc2_foundation::{NSNotification, NSObject, NSObjectProtocol};
 
-use crate::backend::{Backend, Offline};
+use crate::backend::Backend;
 use crate::i18n::tr;
 use crate::model::AppState;
 use crate::snapshot::Args;
@@ -46,7 +46,7 @@ define_class!(
 
         #[unsafe(method(applicationShouldTerminate:))]
         fn should_terminate(&self, _app: &NSApplication) -> NSApplicationTerminateReply {
-            if !store::with(|s| s.is_recording) || SAVED_FOR_QUIT.with(|s| s.get()) {
+            if !store::with(|s| s.is_recording || s.saving) || SAVED_FOR_QUIT.with(|s| s.get()) {
                 return NSApplicationTerminateReply::TerminateNow;
             }
             // Cancel this quit, save the take (at most 20 seconds), then quit again. Waiting
@@ -61,7 +61,7 @@ define_class!(
 );
 
 fn wait_then_quit(tries: u32) {
-    if store::with(|s| s.is_recording) && tries > 0 {
+    if store::with(|s| s.is_recording || s.saving) && tries > 0 {
         util::later(0.1, move || wait_then_quit(tries - 1));
         return;
     }
@@ -101,7 +101,7 @@ fn launched(mtm: MainThreadMarker) {
         });
         d.animate();
     } else {
-        let backend: Rc<dyn Backend> = Rc::new(Offline);
+        let backend: Rc<dyn Backend> = crate::live::Live::new();
         let mut state = AppState::new(prefs::load());
         state.force_low_battery = args.force_low_battery;
         state.launch_at_login = login::enabled();
@@ -114,6 +114,11 @@ fn launched(mtm: MainThreadMarker) {
     store::observe(settings_window::refresh);
 
     if let Some(dir) = args.snapshot {
+        // With the real receiver: only the link, which reads the receiver's status. No hot key,
+        // no button monitor, no menu bar icon; nothing a stray click or key could start.
+        if !args.demo {
+            crate::live::start_link_only();
+        }
         snapshot::run(dir, args.demo);
         return;
     }
@@ -182,6 +187,11 @@ fn install_main_menu(mtm: MainThreadMarker) {
         main.addItem(&top);
     }
     NSApplication::sharedApplication(mtm).setMainMenu(Some(&main));
+}
+
+/// Quits the app the normal way (a take in progress is saved first).
+pub fn quit() {
+    NSApplication::sharedApplication(util::mtm()).terminate(None);
 }
 
 /// Brings Lavdeck forward (a menu bar app isn't frontmost, so its windows would open behind).

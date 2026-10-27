@@ -69,6 +69,8 @@ version = "0.1.0"
 dependencies = [
  "block2",
  "dispatch2",
+ "lavdeck-capture",
+ "lavdeck-kit",
  "libc",
  "objc2",
  "objc2-app-kit",

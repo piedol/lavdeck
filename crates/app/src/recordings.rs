@@ -538,13 +538,65 @@ pub fn reload() {
         )
     });
     let backend = store::backend();
-    let takes = backend.scan_takes(&root, &names);
-    let mut docs = HashMap::new();
-    for t in takes.iter().filter(|t| t.has_transcript()) {
-        if let Some(d) = cached_transcript(t, &*backend) {
-            docs.insert(t.id.clone(), d);
+    let generation = RELOADS.with(|r| {
+        r.set(r.get() + 1);
+        r.get()
+    });
+    match backend.scanner() {
+        // Off the main thread: the take library reads every take's audio duration.
+        Some(scan) => {
+            let cache = TRANSCRIPTS.with(|c| c.borrow().clone());
+            std::thread::spawn(move || {
+                let takes = scan(&root, &names);
+                let (docs, cache) = transcripts(&takes, cache, |t| {
+                    TranscriptDocument::load(&t.transcript_path()).ok()
+                });
+                util::main_async(move || {
+                    // A newer reload started meanwhile; it wins.
+                    if RELOADS.with(|r| r.get()) == generation {
+                        TRANSCRIPTS.with(|c| *c.borrow_mut() = cache);
+                        loaded(takes, docs);
+                    }
+                });
+            });
+        }
+        None => {
+            let takes = backend.scan_takes(&root, &names);
+            let cache = TRANSCRIPTS.with(|c| c.borrow().clone());
+            let (docs, cache) = transcripts(&takes, cache, |t| backend.load_transcript(t));
+            TRANSCRIPTS.with(|c| *c.borrow_mut() = cache);
+            loaded(takes, docs);
         }
     }
+}
+
+/// Parsed transcripts by take, re-reading only files that changed since `cache`; returns them
+/// and the cache to keep.
+fn transcripts(
+    takes: &[Take],
+    cache: TranscriptCache,
+    load: impl Fn(&Take) -> Option<TranscriptDocument>,
+) -> (HashMap<String, TranscriptDocument>, TranscriptCache) {
+    let mut docs = HashMap::new();
+    let mut fresh = HashMap::new();
+    for t in takes.iter().filter(|t| t.has_transcript()) {
+        let path = t.transcript_path();
+        let Ok(modified) = std::fs::metadata(&path).and_then(|m| m.modified()) else {
+            continue;
+        };
+        let doc = match cache.get(&path).filter(|(m, _)| *m == modified) {
+            Some((_, doc)) => Some(doc.clone()),
+            None => load(t),
+        };
+        if let Some(doc) = doc {
+            fresh.insert(path, (modified, doc.clone()));
+            docs.insert(t.id.clone(), doc);
+        }
+    }
+    (docs, fresh)
+}
+
+fn loaded(takes: Vec<Take>, docs: HashMap<String, TranscriptDocument>) {
     let first_load = with(|s| {
         s.takes = takes;
         s.transcripts = docs;
@@ -564,32 +616,17 @@ pub fn reload() {
         }
         s.loaded = true;
     });
+    update_overlay();
     focus_requested_take();
     apply_selection();
 }
 
+type TranscriptCache = HashMap<PathBuf, (std::time::SystemTime, TranscriptDocument)>;
+
 thread_local! {
     /// Parsed transcripts by path and modification time.
-    static TRANSCRIPTS: RefCell<HashMap<PathBuf, (std::time::SystemTime, TranscriptDocument)>> = RefCell::new(HashMap::new());
-}
-
-fn cached_transcript(
-    take: &Take,
-    backend: &dyn crate::backend::Backend,
-) -> Option<TranscriptDocument> {
-    let path = take.transcript_path();
-    let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok()?;
-    if let Some(doc) = TRANSCRIPTS.with(|c| {
-        c.borrow()
-            .get(&path)
-            .filter(|(m, _)| *m == modified)
-            .map(|(_, d)| d.clone())
-    }) {
-        return Some(doc);
-    }
-    let doc = backend.load_transcript(take)?;
-    TRANSCRIPTS.with(|c| c.borrow_mut().insert(path, (modified, doc.clone())));
-    Some(doc)
+    static TRANSCRIPTS: RefCell<TranscriptCache> = RefCell::new(HashMap::new());
+    static RELOADS: Cell<u64> = const { Cell::new(0) };
 }
 
 /// Rebuilds the filtered, sorted rows (on takes, transcripts, search, filter or sort changes).

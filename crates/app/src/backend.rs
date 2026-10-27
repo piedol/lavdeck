@@ -1,22 +1,24 @@
 //! The seam between the interface and the hardware, the recorder and the take library.
 //!
-//! The views and [`crate::store`] only ever call a [`Backend`]. Phase 1 has two: the
-//! [`crate::demo`] backend (made-up mics and takes, like the Swift app's `--demo`) and
-//! [`Offline`] (no receiver, no takes) for a normal launch until the kit and capture crates
-//! are wired in. Phase 2 adds the real one over `lavdeck-kit` (mic controller, recorder, take
-//! library, plugin runner) and `lavdeck-capture` (screen and camera), reporting back through
-//! the `store::*` callbacks named on each method.
+//! The views and [`crate::store`] only ever call a [`Backend`]: the real one,
+//! [`crate::live::Live`] over `lavdeck-kit` (receiver, recorder, take library, plugins) and
+//! `lavdeck-capture` (screen and camera), or the [`crate::demo`] one (made-up mics and takes,
+//! like the Swift app's `--demo`). Backends report back through the `store::*` callbacks named
+//! on each method.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::model::plugins::{Launch, Plugin};
+use crate::model::plugins::{JsonValue, Launch, Plugin};
 use crate::model::settings::{RecordingFormat, Settings};
 use crate::model::status::ChannelMode;
 use crate::model::takes::{Take, TranscriptDocument};
 
-/// Called once with the outcome of a receiver write.
+/// Called once with the outcome of a receiver write or a start, in words for the deck.
 pub type Done = Box<dyn FnOnce(Result<(), String>)>;
+
+/// Scans a recordings root on a background thread.
+pub type Scanner = fn(&Path, &BTreeMap<String, String>) -> Vec<Take>;
 
 /// What a take needs to start. The backend picks file names (`<root>/<yyyy-MM-dd>/<HH.mm.ss>
 /// …`) and does the capture-then-audio start order of `AppModel.startRecording`.
@@ -56,6 +58,12 @@ pub trait Backend {
     /// Every take under `root`, newest first.
     fn scan_takes(&self, root: &Path, mic_names: &BTreeMap<String, String>) -> Vec<Take>;
 
+    /// A scan that can run off the main thread (the take library reads audio durations), or
+    /// `None` to scan with [`Backend::scan_takes`] on the main thread.
+    fn scanner(&self) -> Option<Scanner> {
+        None
+    }
+
     fn load_transcript(&self, take: &Take) -> Option<TranscriptDocument>;
 
     /// Moves every file of a take to the Trash.
@@ -63,6 +71,17 @@ pub trait Backend {
 
     /// Installed plugins and the problems found loading the others.
     fn discover_plugins(&self) -> (Vec<Plugin>, Vec<String>);
+
+    /// Plugins' switches and their settings (defaults overlaid with the user's), as saved.
+    fn plugin_state(
+        &self,
+        _plugins: &[Plugin],
+    ) -> (
+        BTreeMap<String, bool>,
+        BTreeMap<String, BTreeMap<String, JsonValue>>,
+    ) {
+        Default::default()
+    }
 
     fn install_plugin(&self, folder: &Path) -> Result<(), String>;
 
@@ -91,87 +110,4 @@ pub trait Backend {
 
     /// Whether permission prompts may be shown (never in the demo).
     fn may_prompt(&self) -> bool;
-}
-
-/// A normal launch before the kit and capture crates are wired in: no receiver, no takes.
-pub struct Offline;
-
-impl Backend for Offline {
-    fn start(&self) {}
-
-    fn set_channel(&self, _mode: ChannelMode, done: Done) {
-        done(Err(crate::i18n::tr("The receiver isn’t connected.")));
-    }
-
-    fn set_gain(&self, _db: i32, done: Done) {
-        done(Err(crate::i18n::tr("The receiver isn’t connected.")));
-    }
-
-    fn start_recording(&self, _request: RecordRequest, done: Done) {
-        done(Err(crate::i18n::tr("The receiver isn’t connected.")));
-    }
-
-    fn stop_recording(&self) {}
-
-    fn channel_levels(&self) -> Vec<f32> {
-        Vec::new()
-    }
-
-    fn scan_takes(&self, _root: &Path, _names: &BTreeMap<String, String>) -> Vec<Take> {
-        Vec::new()
-    }
-
-    fn load_transcript(&self, take: &Take) -> Option<TranscriptDocument> {
-        TranscriptDocument::load(&take.transcript_path()).ok()
-    }
-
-    fn trash(&self, _take: &Take) -> Result<(), String> {
-        Err(crate::i18n::tr("This isn’t available yet."))
-    }
-
-    fn discover_plugins(&self) -> (Vec<Plugin>, Vec<String>) {
-        (Vec::new(), Vec::new())
-    }
-
-    fn install_plugin(&self, _folder: &Path) -> Result<(), String> {
-        Err(crate::i18n::tr("This isn’t available yet."))
-    }
-
-    fn plugins_folder(&self) -> PathBuf {
-        crate::util::home().join("Library/Application Support/Lavdeck/Plugins")
-    }
-
-    fn launch(&self, launch: Launch, _take: Take) {
-        let id = launch.job_id;
-        crate::util::main_async(move || {
-            crate::store::job_finished(
-                id,
-                crate::model::plugins::JobState::Failed(crate::i18n::tr(
-                    "This isn’t available yet.",
-                )),
-            )
-        });
-    }
-
-    fn cancel(&self, _job_id: u64) {}
-
-    fn open_in_app(&self, _take: &Take, _plugin: &Plugin) -> Result<(), String> {
-        Err(crate::i18n::tr("This isn’t available yet."))
-    }
-
-    fn save_settings(&self, settings: &Settings) {
-        crate::prefs::save(settings);
-    }
-
-    fn save_plugins(
-        &self,
-        _e: &BTreeMap<String, bool>,
-        _id: Option<&str>,
-        _v: Option<&BTreeMap<String, crate::model::plugins::JsonValue>>,
-    ) {
-    }
-
-    fn may_prompt(&self) -> bool {
-        true
-    }
 }

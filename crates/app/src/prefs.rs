@@ -1,20 +1,21 @@
 //! The app's settings in the user defaults, under the Swift app's keys, so existing settings
 //! and mic names carry over: `recordingsRoot`, `format`, `splitTracks`, `tapToRecord`, `armed`,
-//! `micNames` and `video.settings`. Like the Swift app this uses the standard domain, which is
-//! `io.github.piedol.lavdeck` in the app bundle. The demo never reads or writes it.
+//! `micNames` and `video.settings`, in the `io.github.piedol.lavdeck` domain (the standard one in
+//! the app bundle, the suite elsewhere, as the kit and CLI open it). The demo never reads or
+//! writes it.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_foundation::{NSArray, NSData, NSDictionary, NSNumber, NSString, NSUserDefaults};
+use objc2_foundation::{NSArray, NSDictionary, NSNumber, NSString, NSUserDefaults};
 
-use crate::model::settings::{RecordingFormat, Settings, VideoSettings};
+use crate::model::settings::{RecordingFormat, Settings};
 use crate::util::{self, ns};
 
 fn defaults() -> Retained<NSUserDefaults> {
-    NSUserDefaults::standardUserDefaults()
+    lavdeck_kit::defaults::domain()
 }
 
 pub fn load() -> Settings {
@@ -55,11 +56,8 @@ pub fn load() -> Settings {
             .filter_map(|(k, v)| Some((k.to_string(), v.downcast::<NSString>().ok()?.to_string())))
             .collect::<BTreeMap<_, _>>();
     }
-    if let Some(data) = d.dataForKey(&ns("video.settings"))
-        && let Ok(v) = serde_json::from_slice::<VideoSettings>(&data.to_vec())
-    {
-        s.video = v;
-    }
+    // Includes the move from the Screen & Camera plugin's settings, as the Swift app did.
+    s.video = crate::convert::video_from(&lavdeck_capture::VideoSettings::load_from(&d));
     s
 }
 
@@ -84,7 +82,5 @@ pub fn save(s: &Settings) {
     let key_refs: Vec<&NSString> = keys.iter().map(|k| &**k).collect();
     let names = NSDictionary::from_retained_objects(&key_refs, &values);
     set("micNames", &names);
-    if let Ok(json) = serde_json::to_vec(&s.video) {
-        set("video.settings", &NSData::with_bytes(&json));
-    }
+    crate::convert::video(&s.video).save_to(&d);
 }

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key><string>en</string>
+	<key>CFBundleIdentifier</key><string>io.github.piedol.lavdeck</string>
+	<key>CFBundleName</key><string>Lavdeck</string>
+	<key>CFBundleDisplayName</key><string>Lavdeck</string>
+	<key>CFBundleExecutable</key><string>Lavdeck</string>
+	<key>CFBundleIconFile</key><string>AppIcon</string>
+	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+	<key>CFBundlePackageType</key><string>APPL</string>
+	<key>CFBundleShortVersionString</key><string>__VERSION__</string>
+	<key>CFBundleVersion</key><string>__BUILD__</string>
+	<key>LSMinimumSystemVersion</key><string>15.0</string>
+	<key>LSUIElement</key><true/>
+	<key>NSMicrophoneUsageDescription</key><string>Lavdeck records from your DJI Mic receiver.</string>
+	<key>NSCameraUsageDescription</key><string>Lavdeck records your camera alongside the mics when you switch CAMERA on.</string>
+</dict>
+</plist>

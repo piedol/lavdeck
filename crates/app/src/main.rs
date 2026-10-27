@@ -1,23 +1,27 @@
 //! Lavdeck: a menu bar deck for the DJI Mic Series Mobile RX. Live mic status, mono or
 //! stereo, gain, recording with screen and camera, a Recordings window and plugins.
 //!
-//! Phase 1 of the Rust port: the whole interface over a view model, driven by the demo
-//! backend (`--demo`); the kit and capture crates plug in behind [`backend::Backend`].
+//! The interface works over a view model ([`store`]) and a [`backend::Backend`]: the real one
+//! over the kit and capture crates, or the demo's made-up mics and takes (`--demo`).
 
 mod app;
 mod backend;
+mod battery;
 mod canvas;
+mod convert;
 mod deck;
 mod demo;
 mod demo_video;
 mod detail;
 mod draw;
 mod drive;
+mod errors;
 mod format;
 mod glyph;
 mod hotkey;
 mod i18n;
 mod i18n_text;
+mod live;
 mod login;
 mod model;
 mod panel;

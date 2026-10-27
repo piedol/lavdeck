@@ -256,10 +256,8 @@ fn begin_take() {
                         s.recording_started = Some(format::now());
                         s.is_recording = true;
                     }
-                    Err(e) => {
-                        s.last_error =
-                            Some(trf("Couldn’t start recording: {error}", &[("error", &e)]))
-                    }
+                    // The backend words it: a missing permission reads differently from a failure.
+                    Err(e) => s.last_error = Some(e),
                 }
             });
             if with(|s| s.is_recording) {
@@ -426,9 +424,15 @@ pub fn set_launch_at_login(on: bool) {
 
 pub fn reload_plugins() {
     let (plugins, problems) = backend().discover_plugins();
+    let (enabled, stored) = backend().plugin_state(&plugins);
     update(|s| {
         s.plugins.plugins = plugins;
         s.plugins.problems = problems;
+        // The demo has no saved state: its switches stay as it set them.
+        if !enabled.is_empty() {
+            s.plugins.enabled = enabled;
+            s.plugins.stored = stored;
+        }
     });
 }
 
@@ -552,26 +556,29 @@ pub fn reveal_recordings() {
 }
 
 // MARK: Backend callbacks
-//
-// The demo drives the model directly; the kit and capture backend (phase 2) reports through
-// `receiver_status`, `receiver_connected` and `capture_failed` too.
 
-#[allow(dead_code)]
-pub fn receiver_status(status: MicStatus) {
-    update(|s| {
+/// A status push from the receiver. `pushed` is whether any push has arrived on this link.
+pub fn receiver_status(status: MicStatus, pushed: bool) {
+    let log = update(|s| {
         if s.demo {
-            return;
+            return false;
         }
         s.known_transmitters
             .extend(status.receiver.connected_transmitters.iter().copied());
         if !s.is_connected && status.receiver.channel_mode.is_some() {
             s.is_connected = true;
         }
+        if status.receiver.channel_mode.is_none() && !pushed {
+            s.is_connected = false;
+        }
         s.status = status;
+        true
     });
+    if log {
+        with(crate::battery::log);
+    }
 }
 
-#[allow(dead_code)]
 pub fn receiver_connected(connected: bool) {
     update(|s| s.is_connected = connected);
 }
@@ -593,34 +600,41 @@ pub fn capture_started(source: &str) {
     });
 }
 
-#[allow(dead_code)]
 pub fn capture_failed(message: String) {
     update(|s| s.last_error = Some(message));
 }
 
 /// The take ended: `Ok(Some(take))` when its files and metadata are written, `Ok(None)` when
 /// nothing was kept, `Err` when it stopped with an error.
-pub fn recording_finished(
-    result: Result<Option<Take>, String>,
-    folder: Option<std::path::PathBuf>,
-) {
+/// The audio file is finished (or stopped with an error): the deck leaves recording at once,
+/// while the take's files are still being saved.
+pub fn recording_stopped(error: Option<String>, folder: Option<std::path::PathBuf>) {
     LEVEL_RUN.with(|r| r.set(r.get() + 1));
     update(|s| {
         s.is_recording = false;
+        s.saving = true;
         s.recording_levels.clear();
         s.recording_started = None;
-        s.capture_sources.clear();
         if folder.is_some() {
             s.last_saved_folder = folder;
         }
-        if let Err(e) = &result {
+        if let Some(e) = error {
             s.last_error = Some(trf(
                 "Recording stopped with an error: {error}",
-                &[("error", e)],
+                &[("error", &e)],
             ));
         }
     });
-    if let Ok(Some(take)) = result {
+}
+
+/// The take's files and metadata are written (`None` when nothing was kept): run what follows
+/// a take, and refresh Recordings.
+pub fn take_saved(take: Option<Take>) {
+    update(|s| {
+        s.saving = false;
+        s.capture_sources.clear();
+    });
+    if let Some(take) = take {
         let launches = update(|s| s.plugins.take_finished(&take));
         for l in launches {
             backend().launch(l, take.clone());
@@ -630,6 +644,24 @@ pub fn recording_finished(
         }
         note_library_changed();
     }
+}
+
+/// Both at once, for a backend that saves instantly (the demo).
+pub fn recording_finished(
+    result: Result<Option<Take>, String>,
+    folder: Option<std::path::PathBuf>,
+) {
+    let (error, take) = match result {
+        Ok(take) => (None, take),
+        Err(e) => (Some(e), None),
+    };
+    recording_stopped(error, folder);
+    take_saved(take);
+}
+
+/// A plugin wrote a file: lists of takes refresh.
+pub fn job_output(_job_id: u64) {
+    update(|s| s.plugins.outputs_revision += 1);
 }
 
 pub fn job_progress(job_id: u64, fraction: Option<f64>, message: Option<String>) {

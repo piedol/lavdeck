@@ -27,11 +27,32 @@ pub fn main_after(secs: f64, f: impl FnOnce() + Send + 'static) {
     let _ = DispatchQueue::main().after(when, f);
 }
 
-/// Wraps a main-thread closure for the main queue, which needs `Send`.
-struct MainOnly<F>(F);
+/// A main-thread value (a closure holding `Rc`s or AppKit objects) carried through another
+/// thread and back to the main queue, which is the only place it's used or dropped.
+pub struct MainOnly<F>(F);
 
-// SAFETY: only built on the main thread (checked in `later`) and run on the main queue.
+// SAFETY: only made on the main thread (checked in `new`) and only unwrapped there; callers
+// send it straight back to the main queue.
 unsafe impl<F> Send for MainOnly<F> {}
+
+impl<F> MainOnly<F> {
+    pub fn new(value: F) -> MainOnly<F> {
+        assert!(
+            MainThreadMarker::new().is_some(),
+            "MainOnly is made on the main thread"
+        );
+        MainOnly(value)
+    }
+
+    /// The value, back on the main thread.
+    pub fn into_inner(self) -> F {
+        assert!(
+            MainThreadMarker::new().is_some(),
+            "MainOnly is unwrapped on the main thread"
+        );
+        self.0
+    }
+}
 
 /// Run a main-thread closure (one that holds AppKit objects or `Rc`s) on the main queue after
 /// `secs` seconds. Call only from the main thread.

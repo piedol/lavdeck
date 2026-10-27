@@ -92,6 +92,8 @@ pub struct AppState {
     pub is_recording: bool,
     /// Between Record and the first audio sample, while cameras and screen capture warm up.
     pub is_starting: bool,
+    /// After the audio stops, while the take's tracks, captures and metadata are written.
+    pub saving: bool,
     /// Seconds since 1970.
     pub recording_started: Option<f64>,
     /// Per-channel dBFS while recording.
@@ -133,6 +135,7 @@ impl AppState {
             last_error: None,
             is_recording: false,
             is_starting: false,
+            saving: false,
             recording_started: None,
             recording_levels: Vec::new(),
             recording_mode: None,

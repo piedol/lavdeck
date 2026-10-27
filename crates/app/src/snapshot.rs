@@ -2,6 +2,10 @@
 //! (idle, recording and identify; light, dark and Increase Contrast light) and the six menu
 //! bar glyphs (light and dark) to PNGs, then quits. It never takes focus or touches the
 //! receiver. `--snapshot-windows <dir>` draws Recordings and each Settings tab the same way.
+//!
+//! Without `--demo` it reads the real receiver (status only: it sends nothing, and starts no
+//! hot key or button monitor): after four seconds it draws `idle` and the glyphs, then eight
+//! `live-*` frames half a second apart, printing what the receiver reports.
 
 use std::path::{Path, PathBuf};
 
@@ -112,30 +116,95 @@ fn glyph_png(state: Glyph, suffix: &str, path: &Path) {
 /// The Swift app's snapshot set, then quit.
 pub fn run(dir: PathBuf, demo_mode: bool) {
     let _ = std::fs::create_dir_all(&dir);
-    util::later(1.0, move || {
+    // The receiver needs a few seconds to link and push its status.
+    util::later(if demo_mode { 1.0 } else { 4.0 }, move || {
         if demo_mode {
             store::update(|s| demo::load(s, false));
             render("idle", &dir);
             store::update(|s| demo::load(s, true));
             render("recording", &dir);
             store::update(demo::load_identify);
-        } else {
-            render("idle", &dir);
-        }
-        if demo_mode {
             render("identify", &dir);
+            glyphs(&dir);
+            std::process::exit(0);
         }
-        for state in Glyph::ALL {
-            for suffix in ["light", "dark"] {
-                glyph_png(
-                    state,
-                    suffix,
-                    &dir.join(format!("glyph-{}-{suffix}.png", state.file_name())),
-                );
-            }
-        }
-        std::process::exit(0);
+        render("idle", &dir);
+        glyphs(&dir);
+        live_frames(dir, 0);
     });
+}
+
+fn glyphs(dir: &Path) {
+    for state in Glyph::ALL {
+        for suffix in ["light", "dark"] {
+            glyph_png(
+                state,
+                suffix,
+                &dir.join(format!("glyph-{}-{suffix}.png", state.file_name())),
+            );
+        }
+    }
+}
+
+/// With the real receiver: a few frames half a second apart, as saved and then with both mics
+/// armed for this run only (never saved), printing what the receiver reports, then quit. Nothing
+/// is sent to the receiver.
+fn live_frames(dir: PathBuf, i: u32) {
+    if i == 4 {
+        // Arming is the app's own setting, not a receiver command; this run doesn't save it.
+        store::update(|s| s.settings.armed = [1, 2].into());
+    }
+    if i >= 8 {
+        return crate::app::quit();
+    }
+    let name = if i < 4 {
+        format!("live-{}", i + 1)
+    } else {
+        format!("live-armed-{}", i - 3)
+    };
+    store::with(|s| {
+        let rx = &s.status.receiver;
+        let txs: Vec<String> = s
+            .status
+            .transmitters
+            .values()
+            .map(|t| {
+                format!(
+                    "TX{} {} meter {:?} fw {:?} battery {:?} charging {:?} linked {}",
+                    t.index,
+                    s.display_name(t.index),
+                    t.meter_level,
+                    t.identity.firmware,
+                    t.battery_level,
+                    t.is_charging,
+                    s.is_linked(t.index)
+                )
+            })
+            .collect();
+        println!(
+            "{name}: connected {} mode {:?} gain {:?} linked {:?} fw {:?} armed {:?} meters [{:.2}, {:.2}] | {}",
+            s.is_connected,
+            rx.channel_mode,
+            rx.gain_db,
+            rx.connected_transmitters,
+            rx.identity.firmware,
+            s.settings.armed,
+            s.meter(1),
+            s.meter(2),
+            txs.join(" | ")
+        );
+    });
+    let mtm = util::mtm();
+    let root = panel::deck_root(mtm);
+    root.setAppearance(shots::appearance("light").as_deref());
+    let layer = Layer::new(root.clone());
+    let h = {
+        let s = store::with(|s| s.clone());
+        deck::render(&layer, &s, &panel::LINKS)
+    };
+    root.setFrame(rect(0.0, 0.0, deck::W, h));
+    shots::write(&root, &dir.join(format!("{name}.png")));
+    util::later(0.5, move || live_frames(dir, i + 1));
 }
 
 /// Recordings (light and dark, one take and several selected) and each Settings tab.

@@ -62,6 +62,8 @@ pub struct TransmitterStatus {
     pub is_charging: Option<bool>,
     /// The receiver's live level meter value.
     pub meter_level: Option<i32>,
+    /// The raw status word the battery code and charging flag come from (for the battery log).
+    pub raw_flags: Option<u32>,
 }
 
 impl TransmitterStatus {
@@ -72,6 +74,7 @@ impl TransmitterStatus {
             battery_level: None,
             is_charging: None,
             meter_level: None,
+            raw_flags: None,
         }
     }
 }
