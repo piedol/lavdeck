@@ -277,7 +277,11 @@ private let sampleRequest = PluginRequest(kind: "action", name: "go",
 }
 
 @Test func videoSettingsCarryOverFromTheScreenAndCameraPlugin() throws {
-    let defaults = try #require(UserDefaults(suiteName: "lavdeck.tests.video.\(UUID().uuidString)"))
+    // One fixed suite, emptied before and after, so runs don't leave a preferences file each.
+    let suite = "lavdeck.tests.video"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defaults.removePersistentDomain(forName: suite)
+    defer { defaults.removePersistentDomain(forName: suite) }
     // No plugin and nothing saved: video stays off.
     #expect(LavdeckCapture.VideoSettings.load(defaults) == LavdeckCapture.VideoSettings())
     defaults.set(["io.github.piedol.lavdeck.capture": true], forKey: "plugins.enabled")
