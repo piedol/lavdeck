@@ -1,10 +1,10 @@
 # Writing Lavdeck plugins
 
-A plugin adds something Lavdeck does with a recording once it exists, such as a transcript, a cleaned-up mix, or an upload. Plugins run **after** recording, never in the live audio path, so a slow or broken plugin can't cost you a take.
+A plugin does something with a finished recording, such as writing a transcript, cleaning up the mix or uploading the files. Event and action plugins run **after** recording, and no plugin runs in the live audio path, so a slow or broken plugin can't cost you a take.
 
-A plugin is a folder holding a `plugin.json` manifest and an executable. You can write it in any language. Lavdeck starts the executable once per job, writes one JSON request to its standard input, and reads JSON messages from its standard output until it exits.
+A plugin is a folder holding a `plugin.json` manifest and an executable. You can write it in any language. For each job, Lavdeck starts the executable, writes the request to its standard input as JSON, and reads JSON messages from its standard output until it exits.
 
-- [Install and try one](#install-and-try-one)
+- [Install and try a plugin](#install-and-try-a-plugin)
 - [The manifest](#the-manifest)
 - [Jobs: events and actions](#jobs-events-and-actions)
 - [The request](#the-request)
@@ -16,9 +16,9 @@ A plugin is a folder holding a `plugin.json` manifest and an executable. You can
 - [Helpers](#helpers)
 - [Trust](#trust)
 
-## Install and try one
+## Install and try a plugin
 
-The repository ships a small example, [`Examples/plugins/take-info`](../Examples/plugins/take-info). It writes a Markdown summary next to each take.
+The example plugin in [`Examples/plugins/take-info`](../Examples/plugins/take-info) writes a Markdown summary next to each take.
 
 1. Open **Settings › Plugins**, click **Install Plugin…** and choose the plugin's folder. Lavdeck symlinks it into `~/Library/Application Support/Lavdeck/Plugins/`, so edits to your folder take effect on the next run.
 2. Switch the plugin on. Plugins are installed switched off.
@@ -74,22 +74,22 @@ Only one Lavdeck process can talk to the receiver at a time, but `takes`, `plugi
 | `executable` | yes | Path relative to the plugin folder. It must be executable (`chmod +x`). |
 | `arguments` | no | Extra command-line arguments. |
 | `events` | no | Events that run the plugin automatically while it is switched on. |
-| `actions` | no | Commands a user can run on takes from the Recordings window. Each has `id`, `title`, an optional `summary` (tooltip) and optional `requires`: what a take must have for the action to make sense, any of `video` (a captured screen or camera recording), `screen`, `camera`, `transcript`. Lavdeck only offers an action on takes that have all of it, and with several takes selected runs it on the ones that do ("Remake video · 2 of 5"). |
+| `actions` | no | Commands a user can run on takes from the Recordings window. Each has `id`, `title`, an optional `summary` (tooltip) and an optional `requires` list of what a take must have for the action to apply, drawn from `video` (a captured screen or camera recording), `screen`, `camera` and `transcript`. Lavdeck offers an action only on takes that have everything in `requires`. With several takes selected, it runs the action on the ones that do ("Remake video · 2 of 5"). |
 | `settings` | no | Lavdeck draws these in Settings › Plugins and sends the values with every request. Types are `bool`, `string`, `number`, `choice` (with `options`) and `path` (a text field plus a folder or file picker). |
-| `produces` | no | Output kinds. A plugin that produces `transcript` becomes the one behind **Generate transcript** in the Recordings window. |
+| `produces` | no | Output kinds. **Generate transcript** in the Recordings window runs a plugin that produces `transcript`. |
 
 ## Jobs: events and actions
 
 There are two ways a job starts:
 
-- **Event.** Protocol 1 has one event, `take.finished`. It fires when a recording has stopped and every file is in place: the stereo or mono file, split tracks, single-mic extracts and the take's metadata.
+- **Event.** The only event in protocol 1 is `take.finished`. It fires when a recording has stopped and all of its files are in place, including the stereo or mono file, split tracks, single-mic extracts and the take's metadata.
 - **Action.** A user picks one of the plugin's `actions` on a take in the Recordings window. Actions work on any take that meets their `requires`, old or new, so make them safe to run twice. Overwriting your own earlier output is the expected behaviour.
 
-Each job is a separate process. A plugin runs one job at a time: more jobs for it (a batch from a multi-selection, or a take finishing while another is still being processed) queue and start in order. Lavdeck shows progress in the menu bar popover and the Recordings window, and lets the user cancel. Cancelling sends `SIGTERM`. When an event job fails, the popover says so until it's dismissed or the next recording starts; a failed action shows only on its take in the Recordings window.
+Each job is a separate process. Lavdeck runs a plugin's jobs one at a time, so further jobs for it (a batch from a multi-selection, or a take finishing while an earlier take is still being processed) queue and start in order. Progress shows in the menu bar popover and the Recordings window, and the user can cancel a job. Cancelling sends `SIGTERM`. When an event job fails, the popover says so until it's dismissed or the next recording starts. A failed action shows only on its take in the Recordings window.
 
 ## The request
 
-Lavdeck writes a single JSON object to standard input, then closes it:
+Lavdeck writes the request to standard input as a JSON object, then closes it:
 
 ```json
 {
@@ -120,7 +120,7 @@ Lavdeck writes a single JSON object to standard input, then closes it:
 }
 ```
 
-**`kind` and `name`.** `kind` is `event` or `action`. `name` is the event name or your action's `id`.
+`kind` is `event` or `action`. `name` is the event name or your action's `id`.
 
 **`take.files[].role`** is one of:
 
@@ -128,22 +128,22 @@ Lavdeck writes a single JSON object to standard input, then closes it:
 |---|---|
 | `stereo` | Both mics, TX1 left and TX2 right. |
 | `mix` | Mono mix of both mics. |
-| `track` | One mic on its own, with `mic` set to 1 or 2. Present when split tracks are on, or when only one mic was armed. |
+| `track` | The track of the mic in `mic` (1 or 2). Present when split tracks are on, or when only one mic was armed. |
 | `derived` | Anything a plugin wrote, with `kind` set (`transcript`, `audio`, …). |
 | `metadata` | Lavdeck's `<stem>.take.json`. |
-| `capture` | Recorded by a capture plugin alongside the audio, with `kind` (`video` or `audio`), `source` (`screen`, `camera`, `system-audio`) and `offset`: seconds after the take's first audio sample that the file's first frame happened. |
+| `capture` | Recorded by a capture plugin alongside the audio, with `kind` (`video` or `audio`), `source` (`screen`, `camera`, `system-audio`) and `offset`, the time of the file's first frame in seconds after the take's first audio sample. |
 
-**`take.speakers`** lists the mics that were armed, with the names the user gave them. A speaker has a `file` when that mic has its own track. When two speakers both have files, the take is a **two-speaker take**: each person's voice is on its own file, with some bleed from the other mic.
+**`take.speakers`** lists the mics that were armed, with the names the user gave them. A speaker has a `file` when that mic has a separate track. When two speakers both have files, the take is a **two-speaker take**. Each person's voice is in a separate file, with some bleed from the other mic.
 
-**Other fields.** Durations and times are in seconds; dates are ISO 8601. Unknown fields may appear in later minor releases, so ignore what you don't recognise.
+Durations and times are in seconds, and dates are ISO 8601. Unknown fields may appear in later minor releases, so ignore what you don't recognise.
 
-**Environment.** Settings also arrive as environment variables, for plugins that are shell scripts: `LAVDECK_SETTING_<KEY>`, with the key upper-cased and `-` turned into `_`. Two more variables are set:
+Settings also arrive as environment variables, for plugins that are shell scripts: `LAVDECK_SETTING_<KEY>`, with the key upper-cased and `-` turned into `_`. Two more variables are set:
 - `LAVDECK_PLUGIN_PROTOCOL` is the protocol version.
 - `LAVDECK_PLUGIN_DIR` is the plugin folder, which is also the working directory.
 
 ## Messages
 
-Write one JSON object per line to standard output, and flush after each one:
+Write one JSON object per line to standard output, and flush after each line:
 
 ```json
 {"type":"progress","fraction":0.4,"message":"Transcribing Host"}
@@ -164,14 +164,14 @@ Lines that aren't JSON, and everything on standard error, are treated as log tex
 
 ## Writing output
 
-Write next to the take, in `outputDirectory`, and name every file with the take's `stem` as a prefix. That is how Lavdeck groups files into takes: anything starting with `13.00.00` belongs to the 13.00.00 take. It also means **Move to Trash** in the Recordings window removes your output together with the recording.
+Write next to the take, in `outputDirectory`, and start each file name with the take's `stem`. Lavdeck groups files into takes by that prefix, so anything starting with `13.00.00` belongs to the 13.00.00 take, and **Move to Trash** in the Recordings window removes your output together with the recording.
 
 - **Never modify or delete the recording's own files.** Write new files instead, for example `13.00.00 TX1 · voice-ada.wav` beside `13.00.00 TX1.wav`.
-- Write to a temporary name in the same folder, then rename, so a cancelled job never leaves a half-written file under the real name.
+- Write to a temporary name in the same folder, then rename, so a cancelled job never leaves a half-written file under the final name.
 
 ## Conventions
 
-**Transcripts.** A plugin that produces transcripts writes `<stem>.transcript.json` in this shape, so the Recordings window can show, search and play it:
+A plugin that produces transcripts writes `<stem>.transcript.json` in this shape, so the Recordings window can show, search and play it:
 
 ```json
 {
@@ -188,22 +188,22 @@ Write next to the take, in `outputDirectory`, and name every file with the take'
 }
 ```
 
-`words` is optional. Speaker ids match `take.speakers[].id`; use `speaker` for a take with no named mics. A transcription plugin can also write `.md`, `.srt` and `.vtt` siblings.
+`words` is optional. Speaker ids match `take.speakers[].id`. Use `speaker` for a take with no named mics. A transcription plugin can also write `.md`, `.srt` and `.vtt` siblings.
 
-**Audio.** Derived audio keeps the source's sample rate and format, and should say what was done to it in the file name.
+Derived audio keeps the source's sample rate and format, and should say what was done to it in the file name.
 
 ## Capture plugins (protocol 2)
 
-A capture plugin records something alongside Lavdeck's audio. Lavdeck records the screen and the built-in or default camera itself (**Settings › Video**), so a capture plugin is for other sources: a second camera, an iPhone, a feed from another app. Declare `"protocol": 2`, `"kind": "capture"` and a `capture` section:
+A capture plugin records something alongside Lavdeck's audio. Lavdeck records the screen and the built-in or default camera without a plugin (**Settings › Video**), so capture plugins are for other sources, such as a second camera, an iPhone or a feed from another app. Declare `"protocol": 2`, `"kind": "capture"` and a `capture` section:
 
 ```json
 "capture": { "arguments": ["--capture"], "sources": ["camera"] },
 "permissions": ["camera"]
 ```
 
-**Deck switches.** Give a source a `bool` setting with the same key (`"key": "camera"`) and Lavdeck shows it as an on/off button on the deck, next to Lavdeck's own SCREEN and CAMERA, so people don't have to open Settings between takes. Clicking one on a switched-off plugin switches the plugin on with just that source. A plugin whose switches are all off isn't launched, and Lavdeck doesn't ask for the permission of a source that's off (it knows `screen` needs `screen-recording` and `camera` needs `camera`).
+**Deck switches.** Give a source a `bool` setting with the same key (`"key": "camera"`) and Lavdeck shows it as an on/off button on the deck, next to Lavdeck's SCREEN and CAMERA buttons. Clicking the button of a switched-off plugin switches the plugin on with only that source. A plugin whose switches are all off isn't launched, and Lavdeck doesn't ask for the permission of a source that's off (`screen` needs `screen-recording`, and `camera` needs `camera`).
 
-When a recording starts, Lavdeck launches the capture executable (the manifest's `executable` unless `capture.executable` names another) with `capture.arguments`, and the two talk in JSON lines:
+When a recording starts, Lavdeck launches the capture executable (the manifest's `executable` unless `capture.executable` names another) with `capture.arguments`, and the plugin and Lavdeck exchange JSON lines:
 
 | Direction | Line |
 |---|---|
@@ -215,11 +215,11 @@ When a recording starts, Lavdeck launches the capture executable (the manifest's
 
 `log` and `error` lines work as they do for post plugins. Lavdeck waits up to 30 seconds after `stop` for files to finish writing.
 
-**Start order.** Lavdeck starts capture *before* the audio: it sends `start`, waits until every source it expects (switched on, permission granted) has sent `started` or an `error` naming that `source`, at most 5 seconds, and only then starts recording audio. Cameras take about a second to deliver a first frame, so this keeps the first second of video from being black. Send `started` as soon as the first frame is written, and an `error` with `source` for a source you skip, so Record isn't held up.
+**Start order.** Lavdeck starts capture *before* the audio. It sends `start` and waits, for at most 5 seconds, until every source it expects (switched on, permission granted) has sent `started` or an `error` naming that `source`. Only then does it start recording audio. Cameras take about a second to deliver a first frame, so this keeps the first second of video from being black. Send `started` as soon as the first frame is written, and an `error` with `source` for a source you skip, so Record isn't held up.
 
-**Time.** Every `hostTime` and `startHostTime` is seconds on the host clock (mach absolute time), the clock AVFoundation and ScreenCaptureKit already stamp sample buffers with. Report your file's first frame time and Lavdeck lines it up with the audio: it stores each file's offset in `<stem>.take.json` and passes it to later jobs as the file's `offset`. Swift plugins can use `HostClock.now()`.
+**Time.** `hostTime` and `startHostTime` are seconds on the host clock (mach absolute time), the clock AVFoundation and ScreenCaptureKit already stamp sample buffers with. Report your file's first frame time and Lavdeck lines the file up with the audio. It stores each file's offset in `<stem>.take.json` and passes it to later jobs as the file's `offset`. Swift plugins can use `HostClock.now()`.
 
-**Permissions.** Plugins never ask macOS for permissions themselves. List what you need in `permissions`; Lavdeck asks for each one once (when the plugin is switched on, or at the first recording that needs it), whichever plugins need it, and your process runs under Lavdeck's grants. The `start` command's `granted` lists which of your permissions Lavdeck holds right now: skip a source whose permission is missing and report an `error`, rather than calling an API that would prompt.
+**Permissions.** Plugins never ask macOS for permissions. List what you need in `permissions`. Lavdeck asks for each permission once (when the plugin is switched on, or at the first recording that needs it), however many plugins need it, and your process runs under Lavdeck's grants. The `start` command's `granted` lists which of your permissions Lavdeck holds right now. Skip a source whose permission is missing and report an `error`. Don't call an API that would prompt.
 
 **Files.** Name files `<stem> <Source>.<ext>`, for example `14.02.11 Screen.mov` and `14.02.11 Camera.mov`. A capture plugin can also handle post events with its main executable, for example to compose a picture-in-picture video after the take.
 
@@ -227,7 +227,7 @@ The `LavdeckPluginKit` Swift library has the types: `CaptureCommand.lines()`, `C
 
 ## App plugins
 
-An app plugin ships a companion app with its own windows, such as an editor. Lavdeck shows a button on every take in the Recordings window that opens the take in it:
+An app plugin ships a companion app with its own windows, such as an editor. Lavdeck shows a button on every take in the Recordings window that opens the take in that app:
 
 ```json
 "kind": "app",
@@ -238,13 +238,13 @@ An app plugin ships a companion app with its own windows, such as an editor. Lav
 }
 ```
 
-Lavdeck fills `{folder}`, `{stem}` and `{id}` (percent-encoded) and opens the URL with your bundle, so register the URL scheme in the app's `Info.plist`. The app reads the take's files and `<stem>.take.json` directly; write anything it produces next to the take with the stem as a prefix, as other plugins do.
+Lavdeck fills `{folder}`, `{stem}` and `{id}` (percent-encoded) and opens the URL with your bundle, so register the URL scheme in the app's `Info.plist`. The app reads the take's files and `<stem>.take.json` directly. Write anything it produces next to the take with the stem as a prefix, as other plugins do.
 
 ## Helpers
 
-- **Python.** [`Examples/plugins/take-info/lavdeck_plugin.py`](../Examples/plugins/take-info/lavdeck_plugin.py) is a single standard-library file you can copy into your plugin. It handles reading the request, emitting messages, picking the main audio file and naming output files.
-- **Swift.** The `LavdeckPluginKit` library product has the protocol types: `PluginRequest.readFromStandardInput()`, `PluginMessage.progress(…).emit()`, `TranscriptDocument`, and others. Add it as a SwiftPM dependency.
+- For Python, copy [`Examples/plugins/take-info/lavdeck_plugin.py`](../Examples/plugins/take-info/lavdeck_plugin.py) into your plugin. It uses only the standard library and handles reading the request, emitting messages, picking the main audio file and naming output files.
+- For Swift, the `LavdeckPluginKit` library product has the protocol types, including `PluginRequest.readFromStandardInput()`, `PluginMessage.progress(…).emit()` and `TranscriptDocument`. Add it as a SwiftPM dependency.
 
 ## Trust
 
-A plugin is an ordinary program that runs as you, with your permissions. Lavdeck doesn't sandbox it. Install plugins only from people you trust, and read what they do. A plugin stays switched off until you turn it on.
+A plugin is a program that runs as you, with your permissions. Lavdeck doesn't sandbox it. Install plugins only from people you trust, and read what they do. A plugin stays switched off until you turn it on.

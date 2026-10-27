@@ -5,7 +5,7 @@
 <h1 align="center">Lavdeck</h1>
 
 <p align="center">
-  A menu bar deck for the DJI Mic Series Mobile RX: live mic status, mono or stereo, gain and recording.
+  A Mac menu bar app that shows the status of DJI Mic Series Mobile RX mics and controls their mode, gain and recording.
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
   <img src="docs/images/showcase.png" width="880" alt="Lavdeck's deck recording two mics in stereo, next to the Recordings window with a two-speaker take and its transcript">
 </p>
 
-Lavdeck puts the DJI Mic Series Mobile RX in your Mac's menu bar. Plug the receiver into the Mac and the deck shows both transmitters: whether each one is linked, its live level, whether it's charging and its firmware. From the same window you switch the receiver between mono and stereo, set its gain from −12 to +12 dB, and record. In stereo each mic is saved as its own 24-bit WAV file as well as the stereo take.
+Lavdeck controls a DJI Mic Series Mobile RX from your Mac's menu bar. Plug the receiver into the Mac and the deck shows both transmitters, with each mic's link state, live level, charging state and firmware. From the same window you switch the receiver between mono and stereo, set its gain from −12 to +12 dB, and record. In stereo, Lavdeck saves a 24-bit WAV file for each mic next to the stereo take.
 
 Lavdeck can record your screen and camera with the mics, keeps every take in a searchable Recordings window, and runs plugins for jobs such as transcription. It talks to the receiver directly over USB and sends it only four commands, each checked on the hardware: get version, get capabilities, set channel mode and set gain.
 
@@ -41,7 +41,7 @@ Lavdeck is an independent project. It isn't made by DJI or affiliated with DJI.
 
 <img src="docs/images/deck.png" width="372" align="right" alt="The deck: strips named Host and Guest, both armed and linked, with level meters, Host's battery at High and Guest charging, firmware 02.03.17, the gain fader at 0 dB, stereo selected, SCREEN on and the Record button">
 
-Click the menu bar icon to open the deck. Each transmitter has a channel strip; the receiver's controls are on the right.
+Click the menu bar icon to open the deck. Each transmitter has a channel strip, and the receiver's controls are on the right.
 
 On each strip, from the top:
 
@@ -49,12 +49,12 @@ On each strip, from the top:
 - **ARMED** or **OFF**. Only armed mics are recorded.
 - The link light: green while the mic is linked, an amber ring if it drops.
 - A 12-step level meter. In stereo it shows that mic's level. In mono the receiver mixes both mics before the Mac sees them, so both meters show the mix and say **mono mix**.
-- **Charging**, or the battery level the receiver reports. The Mobile RX passes on a coarse code rather than a percentage, and only its "High" code has been worked out so far.
-- The firmware version, marked when one mic is behind the other.
+- **Charging**, or the battery level the receiver reports. The Mobile RX reports a coarse code, not a percentage, and so far only its "High" code has been mapped.
+- The firmware version, marked when a mic's firmware is older than the other's.
 
-On the right are the gain fader (−12, −6, 0, +6 and +12 dB), **MONO** and **STEREO** (stereo puts TX1 on the left channel and TX2 on the right), **SCREEN** and **CAMERA**, and **Record**. The footer shows the receiver's noise cancelling, which you set with the O, L and H switch on the receiver itself, and the recording format. Click the format to open Recordings, or the gear for Settings.
+On the right are the gain fader (−12, −6, 0, +6 and +12 dB), **MONO** and **STEREO** (stereo puts TX1 on the left channel and TX2 on the right), **SCREEN** and **CAMERA**, and **Record**. The footer shows the receiver's noise cancelling, which you set with the O, L and H switch on the receiver, and the recording format. Click the format to open Recordings, or the gear for Settings.
 
-Right-click the menu bar icon for a short menu: start or stop recording, mono or stereo, Recordings, Settings and **Quit Lavdeck**.
+Right-click the menu bar icon for a menu with recording, mono or stereo, Recordings, Settings and **Quit Lavdeck**.
 
 <br clear="right">
 
@@ -62,9 +62,9 @@ Right-click the menu bar icon for a short menu: start or stop recording, mono or
 
 <img src="docs/images/identify.png" width="372" align="right" alt="Identify mode: Host's strip is outlined in green and the banner says That's Host (TX1)">
 
-Click **Which mic is which?** and talk into one mic. Its strip lights up and the banner names it. Click a strip's name to label the mic while you're there.
+Click **Which mic is which?** and talk into a mic. Its strip lights up and the banner names it. Click a strip's name to label the mic while you're there.
 
-Each mic's level is only separate in stereo, so Lavdeck switches the receiver to stereo while the banner is open and switches it back when you click **Done**, or after 45 seconds.
+The receiver reports separate levels only in stereo, so Lavdeck switches the receiver to stereo while the banner is open and switches it back when you click **Done**, or after 45 seconds.
 
 <br clear="right">
 
@@ -72,32 +72,32 @@ Each mic's level is only separate in stereo, so Lavdeck switches the receiver to
 
 <img src="docs/images/recording.png" width="372" align="right" alt="The deck while recording: red name plates for Host on the left and Guest on the right, each naming its file, the elapsed time 00:12:47 and SCREEN lit">
 
-Start and stop a take with **Record**, with **⌥⌘R** from any app, or by tapping the link button on either transmitter. While a take runs, each strip names the file it's writing, its meter shows the level being recorded with a dBFS readout, and the elapsed time sits at the top.
+Start and stop a take with **Record**, with **⌥⌘R** from any app, or by tapping the link button on either transmitter. While a take runs, each strip names the file it's writing, its meter shows the level being recorded with a dBFS readout, and the elapsed time is at the top.
 
 Takes go into a folder for each day, named by the time they started:
 
 | Mode | Files |
 |---|---|
-| Stereo, both mics armed | `11.05.09 Stereo.wav`, plus `11.05.09 TX1.wav` and `11.05.09 TX2.wav` (WAV only; you can turn the separate files off) |
+| Stereo, both mics armed | `11.05.09 Stereo.wav`, plus `11.05.09 TX1.wav` and `11.05.09 TX2.wav` (WAV only, and the separate files can be turned off) |
 | Mono | `11.05.09 Mix.wav` |
-| One mic armed | `11.05.09 TX1.wav` (Lavdeck switches to stereo and keeps only that mic's channel) |
+| TX1 or TX2 armed alone | `11.05.09 TX1.wav` (Lavdeck switches to stereo and keeps only that mic's channel) |
 
 Audio is 48 kHz WAV at 24 bits, or M4A (AAC at 256 kbps). Next to the audio, `11.05.09.take.json` notes when the take started, its length, its mode and the mics' names. The folder is `~/Recordings/Lavdeck` unless you choose another in Settings.
 
 If you quit Lavdeck during a take, including when macOS offers to quit and reopen it after a permission change, it stops the take and saves its files first.
 
-Recording with the transmitters' buttons is on by default, in Settings › General. The receiver can't tell the Mac which button was pressed, so either one starts and stops recording, and while the setting is on the buttons no longer change your Mac's volume.
+Recording with the transmitters' buttons is on by default, in Settings › General. The receiver can't tell the Mac which button was pressed, so either button starts and stops recording. While the setting is on, the buttons don't change your Mac's volume.
 
 <br clear="right">
 
 ## Screen and camera
 
-Switch on **SCREEN**, **CAMERA** or both before you record, and the take gets video as well:
+Switch on **SCREEN**, **CAMERA** or both before you record, and the take includes video:
 
-- The screen recording is the main display at 30 or 60 fps, in HEVC or H.264, with your apps' sound as a second audio track if you want it. Lavdeck's own windows and the camera preview are left out.
+- The screen recording is the main display at 30 or 60 fps, in HEVC or H.264, with your apps' sound as a second audio track if you want it. Lavdeck's windows and the camera preview are left out.
 - Your default camera records at its largest landscape size, up to 3840 pixels wide.
 - Video starts before the audio. Lavdeck waits up to 5 seconds for each source's first frame, so the picture covers the take from its first second, and it notes where each file starts relative to the audio.
-- While you record, a camera preview floats above your windows unless you turn it off. Drag it anywhere; double-click it to switch between a bubble, a large view and full screen.
+- While you record, a camera preview floats above your windows unless you turn it off. Drag it anywhere, and double-click it to switch between a bubble, a large view and full screen.
 - After the take, Lavdeck makes `11.05.09 PiP.mp4` unless you turn it off: your screen with the camera in a corner (or the camera alone) and the mic audio. The bubble's corner, size and shape are in **Settings › Video**, and **Remake Video** in Recordings applies new settings to an earlier take.
 
 ## Recordings
@@ -108,14 +108,14 @@ Switch on **SCREEN**, **CAMERA** or both before you record, and the take gets vi
 
 The Recordings window lists every take with its date, length, a badge when it has video, its mics and the first words of its transcript. You can sort by any column, filter to takes with video, with or without a transcript, or with two speakers, and search transcripts, mic names and dates.
 
-- Space plays and pauses. A take with video plays it in the window with the mic audio; otherwise you hear the stereo or mono take.
-- Click a line of the transcript to play from there. The transcript follows playback until you scroll it yourself.
-- Click an audio or video file to play it, drag a file into another app, or right-click it to open it or show it in Finder. **Share** and **More** cover the rest of a take: Show in Finder, Copy Transcript, Remake Video, plugin actions and Move to Trash.
+- Space plays and pauses. For a take with video, the video plays in the window with the mic audio. Otherwise you hear the stereo or mono take.
+- Click a line of the transcript to play from there. The transcript follows playback until you scroll it.
+- Click an audio or video file to play it, drag a file into another app, or right-click it to open it or show it in Finder. **Share** and **More** hold the other actions: Show in Finder, Copy Transcript, Remake Video, plugin actions and Move to Trash.
 - Select several takes with ⌘-click, ⇧-click or ⌘A to transcribe the ones without a transcript, remake their videos, copy their transcripts as text, or move them to the Trash.
 
 Moving a take to the Trash moves all its files there, so Finder's **Put Back** can restore it.
 
-Transcripts come from a transcription plugin that writes Lavdeck's transcript format. Lavdeck doesn't include one; [Plugins](#plugins) explains how they work.
+Lavdeck doesn't ship a transcription plugin. Transcripts come from a plugin you install that writes Lavdeck's transcript format, as described under [Plugins](#plugins).
 
 ## The menu bar icon
 
@@ -123,7 +123,7 @@ Transcripts come from a transcription plugin that writes Lavdeck's transcript fo
   <img src="docs/images/menu-bar-states.png" width="648" alt="The menu bar icon on a light and a dark menu bar, in six states">
 </p>
 
-From left to right: both mics linked; recording; a mic has dropped; low battery; something needs attention; no receiver. The low-battery state is there for receivers that report a battery level, which the Mobile RX doesn't, so you won't see it with one.
+From left to right: both mics linked; recording; a mic has dropped; low battery; something needs attention; no receiver. The low-battery state is for receivers that report a battery level. The Mobile RX doesn't, so the state never appears with it.
 
 ## Settings
 
@@ -135,7 +135,7 @@ From left to right: both mics linked; recording; a mic has dropped; low battery;
 
 ## Requirements
 
-- A DJI Mic Series Mobile RX, the small receiver that plugs straight into a phone or computer, connected to the Mac directly or through a hub that carries data.
+- A DJI Mic Series Mobile RX, the receiver that plugs into a phone or computer, connected to the Mac directly or through a hub that carries data.
 - A Mac with Apple silicon and macOS 15 or later. Lavdeck has been tested on macOS 26.
 
 | Hardware | Status |
@@ -144,16 +144,16 @@ From left to right: both mics linked; recording; a mic has dropped; low battery;
 | Mobile RX with DJI Mic Mini 2, Mic 2 or Mic 3 transmitters | Likely to work; untested |
 | Other DJI Mic receivers, such as the clip-on Mic Mini and Mic 2 receivers | Unknown; [reports welcome](#contributing) |
 
-Lavdeck can't update the mics' firmware. When one mic's firmware is behind the other's, the deck says so; update it with DJI's own app.
+Lavdeck can't update the mics' firmware. The deck marks a mic whose firmware is older than the other's, and you update it with DJI's app.
 
 ## Install
 
 ### Download
 
-Signed and notarized builds will be on the [Releases page](https://github.com/piedol/lavdeck/releases) as `Lavdeck-macOS-arm64.zip`. The first one is being prepared; until it's posted, build Lavdeck from source.
+Signed and notarized builds will be on the [Releases page](https://github.com/piedol/lavdeck/releases) as `Lavdeck-macOS-arm64.zip`. The first release isn't out yet. Until then, build Lavdeck from source.
 
 1. Open the zip and drag **Lavdeck** into your Applications folder.
-2. Open Lavdeck. Its icon appears in the menu bar; there's no Dock icon.
+2. Open Lavdeck. Its icon appears in the menu bar. Lavdeck has no Dock icon.
 3. Plug in the receiver and click the icon.
 
 ### Build from source
@@ -166,13 +166,13 @@ cd lavdeck && scripts/build-app.sh
 ditto build/Lavdeck.app /Applications/Lavdeck.app && open /Applications/Lavdeck.app
 ```
 
-`scripts/build-app.sh` builds `build/Lavdeck.app` and signs it with the hardened runtime. It uses the code-signing identity in `LAVDECK_SIGN_IDENTITY`, or else the first line of a `.signing-identity` file in the checkout (a certificate name or SHA-1, ignored by git), or else the first Developer ID Application certificate in your keychain. Without any of these it signs ad hoc, which works on your own Mac, but an ad-hoc signature changes with every build and macOS then asks for the microphone, camera and screen recording permissions again. Any identity in your keychain avoids that, including the free Apple Development certificate Xcode makes for your Apple Account.
+`scripts/build-app.sh` builds `build/Lavdeck.app` and signs it with the hardened runtime. It uses the code-signing identity in `LAVDECK_SIGN_IDENTITY`, or else the first line of a `.signing-identity` file in the checkout (a certificate name or SHA-1, ignored by git), or else the first Developer ID Application certificate in your keychain. Without any of these it signs ad hoc, which works on your Mac, but an ad-hoc signature changes with every build and macOS then asks for the microphone, camera and screen recording permissions again. Any identity in your keychain avoids that, including the free Apple Development certificate Xcode makes for your Apple Account.
 
 ### First launch
 
 1. Plug in the receiver and click the menu bar icon.
 2. macOS asks for the microphone the first time you record.
-3. It asks for the camera, and for Screen & System Audio Recording, when you first switch on **CAMERA** or **SCREEN**. macOS applies a new screen recording permission only after Lavdeck reopens, so quit and reopen it once.
+3. It asks for the camera, and for Screen & System Audio Recording, when you first switch on **CAMERA** or **SCREEN**. macOS applies a new screen recording permission only after Lavdeck reopens, so quit and reopen it after you allow it.
 4. To start Lavdeck when you log in, turn on **Open at login** in **Settings › General**.
 
 ### Uninstall
@@ -186,7 +186,7 @@ ditto build/Lavdeck.app /Applications/Lavdeck.app && open /Applications/Lavdeck.
 
 ## Privacy and permissions
 
-- Lavdeck makes no network connections. There's no account, analytics or update check. Plugins are separate programs, and what they do is up to them.
+- Lavdeck makes no network connections and has no analytics or update check. Plugins are separate programs, so check what a plugin does before you install it.
 - The microphone is on only between Record and Stop, and Lavdeck records only the receiver.
 - The screen and camera are recorded only during a take, and only when SCREEN or CAMERA is on. The camera preview shows only while recording.
 - Lavdeck registers **⌥⌘R** as a system-wide hot key, which doesn't need Accessibility access.
@@ -200,26 +200,26 @@ What Lavdeck keeps on your Mac:
 | A line each time a transmitter's charging state or battery code changes, with the mic's name | `~/Library/Logs/Lavdeck/battery.log` |
 | Installed plugins | `~/Library/Application Support/Lavdeck/Plugins` |
 
-A take from one mic is recorded to a temporary file first, which Lavdeck deletes once that mic's channel is saved.
+When TX1 or TX2 is armed alone, the take is recorded to a temporary file first, which Lavdeck deletes after that mic's channel is saved.
 
 The receiver also has a firmware-update channel on the same USB connection. Lavdeck builds its four commands from a closed list and has no way to send anything else. [docs/PROTOCOL.md](docs/PROTOCOL.md) has the details.
 
 ## Plugins
 
-A plugin adds a step to Lavdeck's recordings. It's a folder with a `plugin.json` file and a program in any language, which reads a JSON request on standard input and reports progress and results as JSON lines.
+A plugin is a folder with a `plugin.json` file and a program in any language. The program reads a JSON request on standard input and reports progress and results as JSON lines.
 
 | Kind | What it does |
 |---|---|
-| Event | Runs by itself when a take finishes, for example to transcribe every take |
-| Action | Runs on any take, old or new, from the Recordings window |
+| Event | Runs automatically when a take finishes, for example to transcribe it |
+| Action | Runs on a take from the Recordings window |
 | Capture | Records another source, such as a second camera, alongside the mics, lined up with the audio to the frame |
 | App | Adds an **Open in …** button that opens the take in a companion app, such as an editor |
 
 A plugin that writes Lavdeck's transcript format gets search, speaker names and click-to-play in the Recordings window.
 
-Install a plugin with **Settings › Plugins › Install Plugin…**, or with `lavdeck plugins install <folder>`. Plugins are installed switched off. They never ask macOS for permissions themselves: Lavdeck asks once for what they declare, such as the camera, and they run under Lavdeck's permissions. A plugin runs as you and isn't sandboxed, so install only plugins you trust.
+Install a plugin with **Settings › Plugins › Install Plugin…**, or with `lavdeck plugins install <folder>`. Plugins are installed switched off. A plugin declares the permissions it needs, such as the camera. Lavdeck requests them from macOS, and the plugin runs under Lavdeck's permissions. A plugin runs as you and isn't sandboxed, so install only plugins you trust.
 
-[docs/PLUGINS.md](docs/PLUGINS.md) documents the plugin protocol, and [`Examples/plugins/take-info`](Examples/plugins/take-info) is a small example in Python that writes a summary of each take. [docs/PROTOCOL.md](docs/PROTOCOL.md) describes the receiver's USB protocol, as far as it's been mapped.
+[docs/PLUGINS.md](docs/PLUGINS.md) documents the plugin protocol, and [`Examples/plugins/take-info`](Examples/plugins/take-info) is an example in Python that writes a summary of each take. [docs/PROTOCOL.md](docs/PROTOCOL.md) describes the receiver's USB protocol, as far as it's been mapped.
 
 ## Troubleshooting
 
@@ -232,8 +232,8 @@ Install a plugin with **Settings › Plugins › Install Plugin…**, or with `l
 | macOS asks for permissions again after every build | Your build is signed ad hoc. Sign it with a stable identity; see [Build from source](#build-from-source). |
 | Both meters move together | The receiver is in mono, which mixes both mics. Switch to stereo to see each mic. |
 | A mic's link button changes the Mac's volume | Turn on **Tap a mic's link button to start or stop recording** in Settings › General. |
-| A strip shows "Level 3" or similar instead of a battery level | The receiver reported a battery code Lavdeck hasn't mapped yet. It's logged in `~/Library/Logs/Lavdeck/battery.log`; a report with what the mic's battery really was helps map it. |
-| A take has no transcript | Lavdeck doesn't transcribe by itself. Install and switch on a transcription plugin in Settings › Plugins. |
+| A strip shows "Level 3" or similar instead of a battery level | The receiver reported a battery code Lavdeck hasn't mapped yet. It's logged in `~/Library/Logs/Lavdeck/battery.log`; a report that includes the battery level DJI's app showed at the time helps map it. |
+| A take has no transcript | Lavdeck transcribes through plugins. Install a transcription plugin and switch it on in Settings › Plugins. |
 
 ## Development
 
@@ -258,7 +258,7 @@ swift scripts/make-showcase.swift                  # redraw docs/images/showcase
 
 `--notarize` needs a Developer ID Application certificate and a notarytool keychain profile, named by `NOTARY_PROFILE` (default `piedol-notary`).
 
-The `lavdeck` tool reads and changes the receiver from the terminal. Only one Lavdeck process can talk to the receiver at a time, so quit the app before using the commands that do; `takes`, `plugins` and `run` don't need the receiver.
+The `lavdeck` tool reads and changes the receiver from the terminal. Quit the app before running commands that use the receiver, because two Lavdeck processes can't talk to it at once. `takes`, `plugins` and `run` don't use the receiver.
 
 ```bash
 swift build -c release --product lavdeck
@@ -272,16 +272,16 @@ swift build -c release --product lavdeck
 
 ### Contributing
 
-Bug reports and pull requests are welcome, especially from people with other DJI receivers or transmitters. `lavdeck status --json` and `lavdeck caps` are read-only and safe to run; include their output in your report, but remove the serial numbers and Bluetooth IDs first. Before opening a pull request, run `swift build` and `swift test`.
+Bug reports and pull requests are welcome, especially from people with other DJI receivers or transmitters. `lavdeck status --json` and `lavdeck caps` are read-only. Include their output in your report, with the serial numbers and Bluetooth IDs removed. Before opening a pull request, run `swift build` and `swift test`.
 
 ## Credits
 
-Lavdeck uses only Apple's frameworks: SwiftUI, AppKit, AVFoundation, ScreenCaptureKit, IOKit and IOUSBHost. It contains no DJI code; [docs/PROTOCOL.md](docs/PROTOCOL.md) explains how the receiver's protocol was worked out.
+Lavdeck uses only Apple's frameworks: SwiftUI, AppKit, AVFoundation, ScreenCaptureKit, IOKit and IOUSBHost. It contains no DJI code. [docs/PROTOCOL.md](docs/PROTOCOL.md) explains how the receiver's protocol was worked out.
 
 DJI and DJI Mic are trademarks of SZ DJI Technology Co., Ltd., used here only to say which hardware Lavdeck works with.
 
 ## License
 
-Lavdeck is free software under the [GNU General Public License v3.0 or later](LICENSE). You can use, study, share and change it; if you distribute a modified version, you must release its source under the same license.
+Lavdeck is free software under the [GNU General Public License v3.0 or later](LICENSE). You can use, study, share and change it, including at work. If you distribute a modified version, you must release its source under the same license.
 
 Copyright 2026 piedol

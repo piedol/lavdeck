@@ -1,10 +1,10 @@
-# DJI Mic Mobile RX — USB control protocol
+# DJI Mic Mobile RX USB control protocol
 
-What Lavdeck knows about talking to the DJI Mic Series Mobile RX (the USB‑C plug‑in receiver) over USB, and how it was confirmed. Everything here was observed on real hardware; nothing in this repository contains DJI code.
+These notes cover controlling the DJI Mic Series Mobile RX (the USB‑C plug‑in receiver) over USB, as worked out for Lavdeck, and how it was confirmed. Everything here was observed on a physical receiver. Nothing in this repository contains DJI code.
 
-Tested setup: Mobile RX (reports itself as "DJI Mic Mini 2", firmware 02.03.11.00) with two DJI Mic Mini transmitters, macOS 26 on Apple Silicon. Other DJI receivers may differ.
+Testing used a Mobile RX (it reports itself as "DJI Mic Mini 2", firmware 02.03.11.00) with two DJI Mic Mini transmitters, on an Apple silicon Mac running macOS 26. Other DJI receivers may differ.
 
-> **Safety first.** The receiver also exposes a firmware‑update channel. Two of the commands below can put it into update mode or reset it. Lavdeck can only send the allowlisted commands in [Allowlist](#what-lavdeck-sends), and has no API for arbitrary frames.
+> **Warning.** The receiver also exposes a firmware‑update channel. Two of the commands below can put it into update mode or reset it. Lavdeck can send only the commands in its [allowlist](#what-lavdeck-sends), and has no API for arbitrary frames.
 
 ## USB layout
 
@@ -16,11 +16,11 @@ USB ID `2ca3:4011`, full speed, product string `Wireless Mic Rx`.
 | 1, 3 | USB Audio | The 2‑channel 48 kHz microphone macOS sees |
 | 6 | Vendor `0xFF`/`0xF0`, bulk IN `0x86` / OUT `0x06` | **DJI DUML control and status** |
 
-Interface 6 is also attached by macOS's `accessoryd`. It can still be opened with IOUSBHost (no seize) or libusb, and both readers coexist. The receiver mixes iAP2 link‑sync bytes (`ff 55 02 00 ee 10`) into the stream; ignore them.
+Interface 6 is also attached by macOS's `accessoryd`. It can still be opened with IOUSBHost (no seize) or libusb, and both readers coexist. The receiver mixes iAP2 link‑sync bytes (`ff 55 02 00 ee 10`) into the stream. Ignore them.
 
 ### HID report `0x55` is the firmware‑update service
 
-Requests are `55 <cmd> …` on output report `0x55`; replies come back as `55 <type> …`.
+Requests are `55 <cmd> …` on output report `0x55`, and replies come back as `55 <type> …`.
 
 | Cmd | Meaning | Lavdeck |
 |---|---|---|
@@ -30,11 +30,11 @@ Requests are `55 <cmd> …` on output report `0x55`; replies come back as `55 <t
 | `0x5e` | Receiver version | read‑only |
 | `0x6a` | Connected transmitter index | read‑only |
 
-HID report `0x41` did not answer DUML in testing; control lives on interface 6.
+HID report `0x41` did not answer DUML in testing. Control goes through interface 6.
 
 ### Transmitter button
 
-A short press of a transmitter's link button arrives as a consumer **volume‑up** key (report `0x06`, bit 0). Both transmitters send the same event, so the Mac cannot tell which one was pressed. Lavdeck opens the HID device exclusively when "tap to record" is on, so the key stops changing the system volume.
+A short press of a transmitter's link button arrives as a consumer **volume‑up** key (report `0x06`, bit 0). Both transmitters send the same event, so the Mac cannot tell which transmitter's button was pressed. Lavdeck opens the HID device exclusively when "tap to record" is on, so the key stops changing the system volume.
 
 ## DUML v1 frames (interface 6)
 
@@ -52,7 +52,7 @@ A short press of a transmitter's link button arrives as a consumer **volume‑up
 n-2..  CRC16 of everything before it (poly 0x1021 reflected = 0x8408, init 0x3692), LE
 ```
 
-Addresses: receiver `0x5a` (type 0x1a, index 2), host/app `0x02`. The receiver pushes status to `0x02` several times a second without being asked.
+The receiver's address is `0x5a` (type 0x1a, index 2), and the host/app's is `0x02`. The receiver pushes status to `0x02` several times a second without being asked.
 
 ## Command set `0x5B` (wireless mic)
 
@@ -63,11 +63,11 @@ Addresses: receiver `0x5a` (type 0x1a, index 2), host/app `0x02`. The receiver p
 | `0x12` | get capability | read‑only |
 | `0x35` | HID firmware update | **never sent** |
 
-Also answered: general `0x00/0x01` get version (hardware name `DJI MIC MINI RX`).
+The receiver also answers the general `0x00/0x01` get version command (hardware name `DJI MIC MINI RX`).
 
 ### Status push `0x5B/0x03` (version 3)
 
-Payload: `03, total length (u16 LE), records…`. Each record is `type (1), index (u32 LE: 0 = receiver, 1 = TX1, 2 = TX2), length (1), value`. Offsets below are from the record start `r`; the value starts at `r+6`.
+Payload: `03, total length (u16 LE), records…`. Each record is `type (1), index (u32 LE: 0 = receiver, 1 = TX1, 2 = TX2), length (1), value`. Offsets below are from the record start `r`, and the value starts at `r+6`.
 
 | Type | Content |
 |---|---|
@@ -75,14 +75,14 @@ Payload: `03, total length (u16 LE), records…`. Each record is `type (1), inde
 | `0x02` | transmitter status bits, `w = u32 @ r+6` |
 | `0x03` | receiver status, `h = u16 @ r+6` plus fixed‑offset bytes |
 | `0x04` | Bluetooth ID suffix (ASCII) |
-| `0x05` | live level meter (1 byte, receiver units: ~30 quiet room, ~75 loud speech). Per mic in stereo; the mixed level in mono |
+| `0x05` | live level meter (1 byte, receiver units: ~30 quiet room, ~75 loud speech). Per mic in stereo, the mixed level in mono |
 | `0x06` | product name (ASCII) |
 
 Transmitter `w` (type `0x02`): bit 2 mute, bits 5–6 noise‑cancel level, bit 8 noise cancel, **bit 9 charging (live)**, bits 10–12 battery level code (DJI's `TXChargeRemainingV3`; **1 = high**, read while DJI Mimo showed both mics at 100%; other codes not yet mapped, and the code did not move while the mics charged), signed gain at byte `r+0x0d`.
 
 Receiver `h` (type `0x03`): bits 0–1 environment, bit 2 lossless, bits 3–4 noise‑cancel level, **bit 5 noise cancel**, bit 8 auto power‑off, **bits 9–11 channel mode**, bits 13–15 receiver battery. Signed **gain (dB)** at byte `r+0x08`. **Connected transmitter mask** at byte `r+0x1e` (bit 0 = TX1, bit 1 = TX2). Byte `r+0x22` bit 3 = attached over USB.
 
-In mono the receiver mixes both mics before anything reaches the host, so both `0x05` meters carry the same mixed level; in stereo they track each mic separately (verified against left/right audio). The charging bit follows docking live; the battery code changes rarely if at all, so Lavdeck shows code 1 as High, any other code as "Level N", and logs every change to `~/Library/Logs/Lavdeck/battery.log` until the remaining codes are mapped.
+In mono the receiver mixes both mics before anything reaches the host, so both `0x05` meters carry the same mixed level. In stereo they track each mic separately (verified against left/right audio). The charging bit follows docking live. The battery code changes rarely if at all, so Lavdeck shows code 1 as High and any other code as "Level N", and logs every change to `~/Library/Logs/Lavdeck/battery.log` until the remaining codes are mapped.
 
 ### Set params `0x5B/0x01`
 
@@ -102,7 +102,7 @@ Request: `index (u32 LE) | capability id (u16 LE)` with `0` = all, `5` = channel
 
 ## What Lavdeck sends
 
-Only these, built by `MicCommand` in `Sources/LavdeckKit/Commands.swift`:
+Lavdeck sends only these commands, built by `MicCommand` in `Sources/LavdeckKit/Commands.swift`:
 
 - `0x00/0x01` get version
 - `0x5B/0x12` get capability
@@ -111,4 +111,4 @@ Only these, built by `MicCommand` in `Sources/LavdeckKit/Commands.swift`:
 
 ## How this was worked out
 
-By interoperability analysis: listening to the receiver's own USB traffic, reading which commands DJI's mobile app is built to send, and confirming every write on hardware against the receiver's status and recorded audio. If you have a different DJI receiver and want to help, the `lavdeck` command‑line tool (`lavdeck status --json`, `lavdeck caps`) is read‑only and a good place to start.
+The protocol was mapped by interoperability analysis, which meant listening to the receiver's USB traffic, reading which commands DJI's mobile app is built to send, and confirming every write on hardware against the receiver's status and recorded audio. If you have a different DJI receiver and want to help, start with the read‑only commands of the `lavdeck` command‑line tool (`lavdeck status --json`, `lavdeck caps`).
