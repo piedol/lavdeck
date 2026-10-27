@@ -99,6 +99,8 @@ final class AppModel {
         recorder.onFinish = { [weak self] url, error in
             Task { @MainActor in self?.recordingFinished(url, error: error) }
         }
+        // Snapshots (`--demo`) show made-up mics: they never open the receiver or claim the shortcut.
+        guard !Snapshot.isDemo else { return }
         controller.start()
         restartButtons()
         hotKey = HotKey(keyCode: 15 /* R */, modifiers: [.command, .option]) { [weak self] in

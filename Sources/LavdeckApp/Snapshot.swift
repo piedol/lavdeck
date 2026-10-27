@@ -6,9 +6,13 @@ import AppKit
 import SwiftUI
 
 /// Development aid: `Lavdeck --snapshot <dir>` renders the live popover (light and dark, idle and
-/// recording) plus the menu bar glyphs to PNGs, then quits. Uses the real receiver and recorder.
+/// recording) plus the menu bar glyphs to PNGs, then quits. It uses the real receiver and recorder, or
+/// made-up mics with `--demo`.
 @MainActor
 enum Snapshot {
+    /// `--demo`: a run for screenshots, with made-up mics and no menu bar item, receiver or shortcut.
+    nonisolated static let isDemo = CommandLine.arguments.contains("--demo")
+
     static func runIfRequested(model: AppModel) {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--permission-report"), i + 1 < args.count {
@@ -154,41 +158,57 @@ enum Snapshot {
 
     nonisolated(unsafe) private static var window: NSWindow?
 
-    /// `Lavdeck --recordings-window [seconds] [--dark] [--select-all]` opens the Recordings window on its own and
-    /// prints its window number, so it can be captured with `screencapture -l`. `--select-all` focuses the table
-    /// and sends Select All (⌘A), to show the multi-selection pane; `--select-row n` selects one row instead.
+    /// `Lavdeck --recordings-window [seconds] [--dark] [--select-all] [--size WxH]` opens the Recordings window on
+    /// its own and prints its window number, so it can be captured with `screencapture -l`. The window sits behind
+    /// everything at the right edge of the screen, with 2 points showing, and Lavdeck doesn't activate, so a capture
+    /// never takes focus from the app you're using. `--select-all` focuses the table and selects every take, to show
+    /// the multi-selection pane; `--select-row n` selects one row instead.
     private static func showRecordings(model: AppModel, dark: Bool, selectAll: Bool, row: Int?, seconds: Double) {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(500))
             NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-            let w = NSWindow(contentRect: NSRect(x: 120, y: 120, width: 1040, height: 640),
-                             styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
+            let args = CommandLine.arguments
+            let size = args.firstIndex(of: "--size").flatMap { args[safe: $0 + 1] }
+                .map { $0.split(separator: "x").compactMap { Double($0) } }
+                .flatMap { $0.count == 2 ? NSSize(width: $0[0], height: $0[1]) : nil } ?? NSSize(width: 1040, height: 640)
+            let w = SnapshotWindow(contentRect: NSRect(origin: .zero, size: size),
+                                   styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
+                                   backing: .buffered, defer: false)
             w.contentViewController = NSHostingController(rootView: NavigationStack { RecordingsView() }.environment(model))
-            w.setContentSize(NSSize(width: 1040, height: 640))
+            w.setContentSize(size)
             w.title = "Recordings"
+            w.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)))
+            if let screen = NSScreen.screens.first?.frame { w.setFrameOrigin(NSPoint(x: screen.maxX - 2, y: screen.minY + 40)) }
             window = w
-            NSApp.activate()
-            w.makeKeyAndOrderFront(nil)
-            if let row {
-                try? await Task.sleep(for: .seconds(1))
-                w.contentView.flatMap(firstTable)?.selectRowIndexes([row], byExtendingSelection: false)
-            }
-            if selectAll {
-                try? await Task.sleep(for: .seconds(1))
-                // What Edit › Select All (⌘A) sends to the focused table. Sent directly: this dev window isn't
-                // always key when launched from a shell, so the responder chain may not reach it.
-                if let table = w.contentView.flatMap(firstTable) {
-                    w.makeFirstResponder(table)
-                    table.selectAll(nil)
-                }
-                try? await Task.sleep(for: .milliseconds(500))
-            }
+            w.orderFrontRegardless()
+            try? await Task.sleep(for: .seconds(1))
+            let table = w.contentView.flatMap(firstTable)
+            if let table { w.makeFirstResponder(table) }
+            if let row { table?.selectRowIndexes([row], byExtendingSelection: false) }
+            // What Edit › Select All (⌘A) does in the focused table.
+            if selectAll { table?.selectAll(nil) }
+            try? await Task.sleep(for: .milliseconds(500))
+            // A focused table in the key window draws its selection in the accent colour.
+            table?.enumerateAvailableRowViews { rowView, _ in rowView.isEmphasized = true }
+            try? await Task.sleep(for: .milliseconds(200))
             print("window \(w.windowNumber)")
             fflush(stdout)
             try? await Task.sleep(for: .seconds(seconds))
             NSApp.terminate(nil)
         }
     }
+}
+
+/// Draws as the key window of the active app without Lavdeck activating, so a snapshot shows the window as it
+/// looks in use. It also stays where it's put, even off the screen's edge.
+private final class SnapshotWindow: NSWindow {
+    override var isKeyWindow: Bool { true }
+    override var isMainWindow: Bool { true }
+    @objc func _hasActiveAppearance() -> Bool { true }
+    @objc func _hasActiveAppearanceIgnoringKeyFocus() -> Bool { true }
+    @objc func _hasActiveControls() -> Bool { true }
+    @objc func _hasActiveAppearanceForStandardWindowButton(_ button: Int) -> Bool { true }
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
 @MainActor private func firstTable(in view: NSView) -> NSTableView? {

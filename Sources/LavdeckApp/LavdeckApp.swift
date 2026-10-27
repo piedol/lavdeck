@@ -42,7 +42,7 @@ struct LavdeckApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra {
+        MenuBarExtra(isInserted: .constant(!Snapshot.isDemo)) {
             PopoverView().environment(model)
         } label: {
             MenuBarLabel(state: model.glyph)
