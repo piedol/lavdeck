@@ -223,9 +223,9 @@ impl VideoSettings {
         self.screen || self.camera
     }
 
-    /// Loads from the standard defaults (`io.github.piedol.lavdeck` in the app bundle).
+    /// Loads from Lavdeck's settings domain, `io.github.piedol.lavdeck`.
     pub fn load() -> VideoSettings {
-        Self::load_from(&NSUserDefaults::standardUserDefaults())
+        Self::load_from(&lavdeck_kit::defaults::domain())
     }
 
     pub fn load_from(defaults: &NSUserDefaults) -> VideoSettings {
@@ -237,9 +237,9 @@ impl VideoSettings {
         migrated(defaults).unwrap_or_default()
     }
 
-    /// Saves to the standard defaults.
+    /// Saves to Lavdeck's settings domain.
     pub fn save(&self) {
-        self.save_to(&NSUserDefaults::standardUserDefaults());
+        self.save_to(&lavdeck_kit::defaults::domain());
     }
 
     pub fn save_to(&self, defaults: &NSUserDefaults) {

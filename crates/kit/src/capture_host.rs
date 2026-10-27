@@ -27,6 +27,14 @@ pub struct CaptureOutput {
     pub start_host_time: Option<f64>,
 }
 
+impl CaptureOutput {
+    /// The file's offset in `.take.json` (`media[].offset`): seconds after the audio's first sample
+    /// that its first frame happened. Unknown when either start is.
+    pub fn offset(&self, audio_start_host_time: Option<f64>) -> Option<f64> {
+        Some(self.start_host_time? - audio_start_host_time?)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum CaptureProblemKind {
     /// The capture process couldn't be launched.
@@ -450,6 +458,22 @@ echo '{"type":"stopped"}'
         assert_eq!(*started.lock().unwrap(), ["screen"]);
         assert!(!host.is_running());
         let _ = std::fs::remove_dir_all(&plugin.folder);
+    }
+
+    #[test]
+    fn offsets_are_relative_to_the_first_audio_sample() {
+        let output = |start| CaptureOutput {
+            plugin_id: "lavdeck".into(),
+            path: "/d/09.00.00 Camera.mov".into(),
+            source: "camera".into(),
+            kind: "video".into(),
+            start_host_time: start,
+        };
+        // Video starts before the audio (it's started first), so offsets are usually negative.
+        assert_eq!(output(Some(1000.25)).offset(Some(1000.75)), Some(-0.5));
+        assert_eq!(output(Some(1001.0)).offset(Some(1000.75)), Some(0.25));
+        assert_eq!(output(None).offset(Some(1.0)), None);
+        assert_eq!(output(Some(1.0)).offset(None), None);
     }
 
     #[test]

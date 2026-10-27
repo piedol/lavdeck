@@ -7,6 +7,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use block2::RcBlock;
+use lavdeck_kit::{TakeDescriptor, TakeFile, TakeRole};
 use objc2::rc::{Allocated, Retained};
 use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{AnyThread, ClassType, DefinedClass, define_class, msg_send};
@@ -35,7 +36,6 @@ use objc2_foundation::{
 use crate::error::CaptureError;
 use crate::layout::{self, PipLayout, Rect};
 use crate::settings::VideoSettings;
-use crate::take::{TakeDescriptor, TakeFile, TakeRole};
 use crate::util::{Shared, any, cf_ns, dictionary, file_url, ns, number, wait};
 
 /// Makes and remakes the finished video.
@@ -44,7 +44,7 @@ pub struct VideoComposer;
 impl VideoComposer {
     /// The file the finished video is written to.
     pub fn output_path(take: &TakeDescriptor) -> PathBuf {
-        take.folder.join(format!("{} PiP.mp4", take.stem))
+        Path::new(&take.folder).join(format!("{} PiP.mp4", take.stem))
     }
 
     /// Writes the finished video for `take` (replacing an earlier one, for Remake Video) and returns its path;
@@ -55,8 +55,13 @@ impl VideoComposer {
         settings: &VideoSettings,
         progress: impl FnMut(f64),
     ) -> Result<PathBuf, CaptureError> {
-        let screen = take.capture("screen");
-        let camera = take.capture("camera");
+        let captured = |source: &str| {
+            take.files
+                .iter()
+                .find(|f| f.role == TakeRole::Capture && f.source.as_deref() == Some(source))
+        };
+        let screen = captured("screen");
+        let camera = captured("camera");
         if screen.is_none() && camera.is_none() {
             return Err(CaptureError::NothingRecorded("screen or camera".into()));
         }
@@ -187,7 +192,7 @@ fn export(
 
     // The take's timeline starts at the first audio sample.
     for file in audio {
-        let asset = asset(&file.path);
+        let asset = asset(Path::new(&file.path));
         let Some(track) = load_tracks(&asset, media(unsafe { AVMediaTypeAudio }))?
             .into_iter()
             .next()
@@ -220,7 +225,7 @@ fn export(
     let mut add_video =
         |file: Option<&TakeFile>| -> Result<Option<(CMPersistentTrackID, CGSize)>, CaptureError> {
             let Some(file) = file else { return Ok(None) };
-            let asset = asset(&file.path);
+            let asset = asset(Path::new(&file.path));
             let Some(track) = load_tracks(&asset, media(unsafe { AVMediaTypeVideo }))?
                 .into_iter()
                 .next()

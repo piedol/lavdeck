@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use dispatch2::{DispatchQueue, DispatchRetained};
+use lavdeck_kit::HostClock;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2::{AnyThread, DefinedClass, define_class, msg_send};
@@ -26,7 +27,6 @@ use objc2_core_video::{
 use objc2_foundation::{NSArray, NSNumber, NSObject, NSObjectProtocol};
 
 use crate::error::CaptureError;
-use crate::host_clock;
 use crate::layout::{self, CameraFormat};
 use crate::screen::{RecordedFile, add_input, encoder_input, finish_writing, new_writer};
 use crate::util::{Shared, any, cf_ns, dictionary};
@@ -130,7 +130,7 @@ impl Inner {
                 .flags
                 .contains(CMTimeFlags::Valid)
                 .then(|| unsafe { converted.seconds() });
-            (self.on_started)(state.start_host_time.unwrap_or_else(host_clock::now));
+            (self.on_started)(state.start_host_time.unwrap_or_else(HostClock::now));
         }
         if let Some(input) = &state.input
             && unsafe { input.isReadyForMoreMediaData() }
@@ -356,6 +356,18 @@ fn finish(
 mod tests {
     use super::*;
     use objc2::ClassType;
+
+    #[test]
+    fn host_clock_is_core_medias_host_time_clock() {
+        // First frames are converted to CMClockGetHostTimeClock; the audio's start is HostClock.
+        let before = HostClock::now();
+        let cm = unsafe { CMClock::host_time_clock().time().seconds() };
+        let after = HostClock::now();
+        assert!(
+            before <= cm + 1e-6 && cm <= after + 1e-6,
+            "{before} {cm} {after}"
+        );
+    }
 
     #[test]
     fn output_class_registers_with_its_protocol() {

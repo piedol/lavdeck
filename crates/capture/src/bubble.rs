@@ -22,14 +22,14 @@ use objc2_av_foundation::{
     AVLayerVideoGravityResizeAspectFill,
 };
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
-use objc2_foundation::{NSArray, NSPointFromString, NSString, NSUserDefaults};
+use objc2_foundation::{NSArray, NSPointFromString, NSString};
 use objc2_quartz_core::CAAutoresizingMask;
 
 use crate::layout::{self, PREVIEW_DIAMETER, Rect};
 use crate::settings::PreviewSize;
 use crate::util::{main_after, ns};
 
-/// Where the bubble was last left, as `NSStringFromPoint`, in the standard defaults.
+/// Where the bubble was last left, as `NSStringFromPoint`, in Lavdeck's settings domain.
 const POSITION_KEY: &str = "bubbleOrigin";
 
 fn cg_rect(r: Rect) -> CGRect {
@@ -279,12 +279,12 @@ impl Inner {
         let origin = self.panel.frame().origin;
         let value = NSString::from_point(origin);
         unsafe {
-            NSUserDefaults::standardUserDefaults().setObject_forKey(Some(&value), &ns(POSITION_KEY))
+            lavdeck_kit::defaults::domain().setObject_forKey(Some(&value), &ns(POSITION_KEY))
         };
     }
 
     fn saved_position() -> Option<(f64, f64)> {
-        let saved = NSUserDefaults::standardUserDefaults().stringForKey(&ns(POSITION_KEY))?;
+        let saved = lavdeck_kit::defaults::domain().stringForKey(&ns(POSITION_KEY))?;
         let p = NSPointFromString(&saved);
         Some((p.x, p.y))
     }

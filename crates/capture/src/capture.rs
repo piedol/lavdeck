@@ -3,7 +3,7 @@
 //! Video starts first: a camera takes about a second to deliver its first frame, so starting it after the
 //! audio left the first second of every video black. Start the capture, wait (up to
 //! [`FIRST_FRAME_TIMEOUT`]) for each source's first frame, then start the audio; each file's first-frame
-//! host time, minus the audio's, is its offset in `.take.json` ([`CaptureOutput::offset`]).
+//! host time, minus the audio's, is its offset in `.take.json` ([`lavdeck_kit::CaptureOutput::offset`]).
 //!
 //! Everything here runs on the main thread. Framework callbacks hop back to it by capture id, so no
 //! main-thread state ever crosses threads.
@@ -15,6 +15,7 @@ use std::rc::{Rc, Weak};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use lavdeck_kit::{CaptureOutput, CaptureProblem, CaptureResult};
 use objc2::MainThreadMarker;
 
 use crate::bubble::CameraBubble;
@@ -22,7 +23,6 @@ use crate::camera::CameraRecorder;
 use crate::error::CaptureError;
 use crate::screen::{RecordedFile, ScreenRecorder};
 use crate::settings::VideoSettings;
-use crate::take::CaptureOutput;
 use crate::util::{main_after, main_async};
 
 /// How long Record waits for each source's first frame before starting the audio anyway.
@@ -48,21 +48,15 @@ impl Source {
     }
 }
 
-/// What a take's video recording left behind.
-#[derive(Debug, Default)]
-pub struct StopResult {
-    /// The files written, screen first, as the capture host reports them (plugin id `lavdeck`).
-    pub outputs: Vec<CaptureOutput>,
-    /// Sources that recorded nothing or couldn't finish their file. The app reports each as a problem
-    /// from "Video".
-    pub problems: Vec<CaptureError>,
-}
+/// The plugin id and name Lavdeck's own recording reports its files and problems under.
+const PLUGIN_ID: &str = "lavdeck";
+const PLUGIN_NAME: &str = "Video";
 
 struct Stopping {
     screen: Option<Result<RecordedFile, CaptureError>>,
     camera: Option<Result<RecordedFile, CaptureError>>,
     waiting: usize,
-    done: Box<dyn FnOnce(StopResult)>,
+    done: Box<dyn FnOnce(CaptureResult)>,
 }
 
 struct Inner {
@@ -270,13 +264,14 @@ impl VideoCapture {
         );
     }
 
-    /// Stops everything and hands over the files written. Safe to call more than once: later calls get
-    /// nothing.
-    pub fn stop(&self, done: impl FnOnce(StopResult) + 'static) {
+    /// Stops everything and hands over the files written, screen first, as the capture host reports
+    /// them (plugin `lavdeck`; a source that recorded nothing or couldn't finish its file is a problem
+    /// from "Video"). Safe to call more than once: later calls get nothing.
+    pub fn stop(&self, done: impl FnOnce(CaptureResult) + 'static) {
         let mut inner = self.inner.borrow_mut();
         if inner.finished {
             drop(inner);
-            return done(StopResult::default());
+            return done(CaptureResult::default());
         }
         inner.finished = true;
         if let Some(bubble) = inner.bubble.take() {
@@ -419,17 +414,20 @@ fn finish_stop(inner: &Rc<RefCell<Inner>>) {
     let Some(stopping) = inner.borrow_mut().stopping.take() else {
         return;
     };
-    let mut result = StopResult::default();
+    let mut result = CaptureResult::default();
     for file in [stopping.screen, stopping.camera].into_iter().flatten() {
         match file {
             Ok(file) => result.outputs.push(CaptureOutput {
-                plugin_id: "lavdeck".into(),
-                path: file.path,
+                plugin_id: PLUGIN_ID.into(),
+                path: file.path.to_string_lossy().into_owned(),
                 source: file.source.into(),
                 kind: "video".into(),
                 start_host_time: file.start_host_time,
             }),
-            Err(error) => result.problems.push(error),
+            // Worded as the Swift app's "\(error)".
+            Err(error) => result
+                .problems
+                .push(CaptureProblem::new(PLUGIN_NAME, &error.to_string())),
         }
     }
     (stopping.done)(result);

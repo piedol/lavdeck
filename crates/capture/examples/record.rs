@@ -7,23 +7,24 @@
 //!
 //! Starts the camera (with its preview) and the screen, waits up to 5 s for their first frames, takes that
 //! moment as the audio's first sample, records for `--seconds`, stops, prints each file's offset, writes a
-//! silent `<stem> Stereo.wav` and `<stem>.take.json` in its place, and composes `<stem> PiP.mp4`.
+//! silent `<stem> Stereo.wav` and the kit's `<stem>.take.json` in its place, reads the take back with the
+//! kit's take library and composes `<stem> PiP.mp4`.
 //!
 //! It never asks for permissions: a source whose permission this process (or the terminal it runs in)
 //! doesn't already hold is reported and skipped. Run it from a signed build that has Camera and Screen &
 //! System Audio Recording access.
 
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use lavdeck_capture::{
     Codec, FIRST_FRAME_TIMEOUT, PERMISSION_CAMERA, PERMISSION_SCREEN_RECORDING, PreviewSize,
-    StopResult, TakeDescriptor, TakeFile, TakeRole, VideoCapture, VideoComposer, VideoSettings,
-    host_clock, wait_until,
+    VideoCapture, VideoComposer, VideoSettings, wait_until,
 };
+use lavdeck_kit::{CaptureResult, HostClock, TakeMedia, TakeMetadata, takes};
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
 use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaTypeVideo};
@@ -94,14 +95,6 @@ fn granted() -> HashSet<String> {
     granted
 }
 
-/// `HH.mm.ss`, local time, as Lavdeck names takes.
-fn stem() -> String {
-    let now = unsafe { libc::time(std::ptr::null_mut()) };
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    unsafe { libc::localtime_r(&now, &mut tm) };
-    format!("{:02}.{:02}.{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec)
-}
-
 fn write_silent_wav(path: &Path, seconds: f64) {
     let rate = 48_000u32;
     let bytes = (seconds * rate as f64) as u32 * 4;
@@ -126,52 +119,54 @@ fn write_silent_wav(path: &Path, seconds: f64) {
     std::fs::write(path, wav).expect("write the WAV");
 }
 
-fn finished(options: &Options, stem: &str, audio_start: f64, result: StopResult) {
+fn finished(options: &Options, stem: &str, audio_start: f64, result: CaptureResult) {
     for problem in &result.problems {
         println!("problem: {problem}");
     }
-    let mut media = Vec::new();
-    let mut files = vec![TakeFile::new(
-        options.out.join(format!("{stem} Stereo.wav")),
-        TakeRole::Stereo,
-    )];
-    for output in &result.outputs {
-        let offset = output.offset(Some(audio_start));
-        println!(
-            "{} → {} (offset {:?} s)",
-            output.source,
-            output.path.display(),
-            offset
-        );
-        let name = output
-            .path
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
-        media.push(serde_json::json!({
-            "file": name, "source": output.source, "kind": output.kind, "offset": offset, "plugin": output.plugin_id,
-        }));
-        files.push(TakeFile::captured(&output.path, &output.source, offset));
-    }
-    write_silent_wav(&files[0].path, options.seconds);
-    let metadata = serde_json::json!({ "version": 1, "format": "wav", "mics": [], "audioStartHostTime": audio_start, "media": media });
-    let _ = std::fs::write(
-        options.out.join(format!("{stem}.take.json")),
-        serde_json::to_vec_pretty(&metadata).unwrap(),
+    write_silent_wav(
+        &options.out.join(format!("{stem} Stereo.wav")),
+        options.seconds,
     );
-    if result.outputs.is_empty() {
+    // The take's metadata, as Record writes it once the audio is saved.
+    let mut metadata = TakeMetadata::new(
+        SystemTime::now(),
+        Some(options.seconds),
+        Some("stereo".into()),
+        "wav",
+        Vec::new(),
+    );
+    metadata.audio_start_host_time = Some(audio_start);
+    let media: Vec<TakeMedia> = result
+        .outputs
+        .iter()
+        .map(|output| {
+            let offset = output.offset(Some(audio_start));
+            println!("{} → {} (offset {offset:?} s)", output.source, output.path);
+            TakeMedia {
+                file: Path::new(&output.path)
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                source: output.source.clone(),
+                kind: output.kind.clone(),
+                offset,
+                plugin: Some(output.plugin_id.clone()),
+            }
+        })
+        .collect();
+    metadata.media = (!media.is_empty()).then_some(media);
+    metadata
+        .write(&options.out.join(format!("{stem}.take.json")))
+        .expect("write the take's metadata");
+    let take = takes::take(&options.out, stem, None, &HashMap::new()).expect("the take");
+    if !take.descriptor.has("video") {
         println!("Nothing recorded.");
         std::process::exit(0);
     }
-    let take = TakeDescriptor {
-        folder: options.out.clone(),
-        stem: stem.into(),
-        files,
-    };
     let settings = options.settings.clone();
     std::thread::spawn(move || {
-        match VideoComposer::make(&take, &settings, |p| {
+        match VideoComposer::make(&take.descriptor, &settings, |p| {
             println!("composing {:.0}%", p * 100.0)
         }) {
             Ok(path) => println!("Saved {}", path.display()),
@@ -189,7 +184,7 @@ fn main() {
     std::fs::create_dir_all(&options.out).expect("output folder");
     let granted = granted();
     println!("granted: {granted:?}");
-    let stem = stem();
+    let (_, stem) = takes::day_and_stem(SystemTime::now());
 
     let capture: Rc<RefCell<Option<VideoCapture>>> = Rc::new(RefCell::new(None));
     let events = capture.clone();
@@ -217,7 +212,7 @@ fn main() {
                 FIRST_FRAME_TIMEOUT,
                 move || {
                     // Stands in for the mic recorder's first sample.
-                    let audio_start = host_clock::now();
+                    let audio_start = HostClock::now();
                     println!("audio starts at host time {audio_start:.3}");
                     let (c3, o3, s3) = (c2.clone(), o2.clone(), s2.clone());
                     wait_until(

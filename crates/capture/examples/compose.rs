@@ -5,68 +5,15 @@
 //!     [--size small|medium|large] [--shape circle|rounded]
 //! ```
 //!
-//! Reads the take's files (`<stem> Stereo.wav`, `Mix`, `TX1`/`TX2`, `Screen.mov`, `Camera.mov`) and the
-//! media offsets in `<stem>.take.json`, then writes `<stem> PiP.mp4`. Needs no permissions.
+//! Reads the take with the kit's take library (its files and the media offsets in
+//! `<stem>.take.json`), then writes `<stem> PiP.mp4`. Needs no permissions.
 
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::path::Path;
 use std::time::Instant;
 
-use lavdeck_capture::{
-    BubbleShape, BubbleSize, Codec, Corner, TakeDescriptor, TakeFile, TakeRole, VideoComposer,
-    VideoSettings,
-};
-
-fn offsets(folder: &Path, stem: &str) -> Vec<(String, f64)> {
-    let Ok(text) = std::fs::read_to_string(folder.join(format!("{stem}.take.json"))) else {
-        return Vec::new();
-    };
-    let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return Vec::new();
-    };
-    json["media"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|m| Some((m["file"].as_str()?.to_string(), m["offset"].as_f64()?)))
-        .collect()
-}
-
-fn take(folder: PathBuf, stem: &str) -> TakeDescriptor {
-    let offsets = offsets(&folder, stem);
-    let offset = |name: &str| offsets.iter().find(|(f, _)| f == name).map(|(_, o)| *o);
-    let mut files = Vec::new();
-    let mut names: Vec<String> = std::fs::read_dir(&folder)
-        .expect("take folder")
-        .filter_map(|e| e.ok()?.file_name().into_string().ok())
-        .filter(|n| n.starts_with(&format!("{stem} ")))
-        .collect();
-    names.sort();
-    for name in names {
-        let rest = &name[stem.len() + 1..];
-        let path = folder.join(&name);
-        let file = match rest {
-            "Stereo.wav" | "Stereo.m4a" => TakeFile::new(path, TakeRole::Stereo),
-            "Mix.wav" | "Mix.m4a" => TakeFile::new(path, TakeRole::Mix),
-            r if r.starts_with("TX1.") => TakeFile {
-                mic: Some(1),
-                ..TakeFile::new(path, TakeRole::Track)
-            },
-            r if r.starts_with("TX2.") => TakeFile {
-                mic: Some(2),
-                ..TakeFile::new(path, TakeRole::Track)
-            },
-            "Screen.mov" => TakeFile::captured(path, "screen", offset(&name)),
-            "Camera.mov" => TakeFile::captured(path, "camera", offset(&name)),
-            _ => continue,
-        };
-        files.push(file);
-    }
-    TakeDescriptor {
-        folder,
-        stem: stem.into(),
-        files,
-    }
-}
+use lavdeck_capture::{BubbleShape, BubbleSize, Codec, Corner, VideoComposer, VideoSettings};
+use lavdeck_kit::takes;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -88,12 +35,17 @@ fn main() {
             other => panic!("unknown option {other}"),
         }
     }
-    let take = take(PathBuf::from(&args[0]), &args[1]);
-    for f in &take.files {
-        println!("{:?} {} offset {:?}", f.role, f.path.display(), f.offset);
+    let Some(take) = takes::take(Path::new(&args[0]), &args[1], None, &HashMap::new()) else {
+        eprintln!("No take {} in {}", args[1], args[0]);
+        std::process::exit(1);
+    };
+    for f in &take.descriptor.files {
+        println!("{:?} {} offset {:?}", f.role, f.path, f.offset);
     }
     let started = Instant::now();
-    match VideoComposer::make(&take, &settings, |p| println!("{:.0}%", p * 100.0)) {
+    match VideoComposer::make(&take.descriptor, &settings, |p| {
+        println!("{:.0}%", p * 100.0)
+    }) {
         Ok(path) => println!(
             "Saved {} in {:.2} s",
             path.display(),

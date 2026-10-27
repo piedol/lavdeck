@@ -10,9 +10,9 @@ mod synth;
 use std::path::{Path, PathBuf};
 
 use lavdeck_capture::{
-    BubbleShape, BubbleSize, CaptureError, Codec, Corner, TakeDescriptor, TakeFile, TakeRole,
-    VideoComposer, VideoSettings,
+    BubbleShape, BubbleSize, CaptureError, Codec, Corner, VideoComposer, VideoSettings,
 };
+use lavdeck_kit::{TakeDescriptor, TakeFile, TakeRole};
 
 const STEM: &str = "09.00.00";
 /// The screen started 0.1 s after the first audio sample, the camera 0.5 s before it.
@@ -89,10 +89,24 @@ fn camera_clip(path: &Path) {
 }
 
 fn take(folder: &Folder, files: Vec<TakeFile>) -> TakeDescriptor {
+    let path = folder.path.to_string_lossy();
     TakeDescriptor {
-        folder: folder.path.clone(),
-        stem: STEM.into(),
         files,
+        ..TakeDescriptor::new(&format!("test/{STEM}"), &path, STEM)
+    }
+}
+
+fn audio(path: PathBuf, role: TakeRole) -> TakeFile {
+    TakeFile::new(&path.to_string_lossy(), role)
+}
+
+/// A captured video, as the take library lists it from `.take.json`.
+fn captured(path: PathBuf, source: &str, offset: Option<f64>) -> TakeFile {
+    TakeFile {
+        kind: Some("video".into()),
+        source: Some(source.into()),
+        offset,
+        ..audio(path, TakeRole::Capture)
     }
 }
 
@@ -110,9 +124,9 @@ fn screen_with_camera_bubble_and_mic_audio() {
     let take = take(
         &folder,
         vec![
-            TakeFile::new(folder.file("Stereo.wav"), TakeRole::Stereo),
-            TakeFile::captured(folder.file("Screen.mov"), "screen", Some(SCREEN_OFFSET)),
-            TakeFile::captured(folder.file("Camera.mov"), "camera", Some(CAMERA_OFFSET)),
+            audio(folder.file("Stereo.wav"), TakeRole::Stereo),
+            captured(folder.file("Screen.mov"), "screen", Some(SCREEN_OFFSET)),
+            captured(folder.file("Camera.mov"), "camera", Some(CAMERA_OFFSET)),
         ],
     );
     let mut reports = Vec::new();
@@ -186,9 +200,9 @@ fn rounded_bubble_top_left_in_h264() {
     let take = take(
         &folder,
         vec![
-            TakeFile::new(folder.file("Stereo.wav"), TakeRole::Stereo),
-            TakeFile::captured(folder.file("Screen.mov"), "screen", Some(SCREEN_OFFSET)),
-            TakeFile::captured(folder.file("Camera.mov"), "camera", Some(CAMERA_OFFSET)),
+            audio(folder.file("Stereo.wav"), TakeRole::Stereo),
+            captured(folder.file("Screen.mov"), "screen", Some(SCREEN_OFFSET)),
+            captured(folder.file("Camera.mov"), "camera", Some(CAMERA_OFFSET)),
         ],
     );
     let settings = VideoSettings {
@@ -234,14 +248,14 @@ fn camera_alone_with_two_mic_tracks() {
     synth::write_wav(&folder.file("TX2.wav"), AUDIO_SECONDS);
     let track = |name: &str, mic| TakeFile {
         mic: Some(mic),
-        ..TakeFile::new(folder.file(name), TakeRole::Track)
+        ..audio(folder.file(name), TakeRole::Track)
     };
     let take = take(
         &folder,
         vec![
             track("TX1.wav", 1),
             track("TX2.wav", 2),
-            TakeFile::captured(folder.file("Camera.mov"), "camera", Some(CAMERA_OFFSET)),
+            captured(folder.file("Camera.mov"), "camera", Some(CAMERA_OFFSET)),
         ],
     );
     let out = VideoComposer::make(&take, &VideoSettings::default(), |_| {}).unwrap();
@@ -266,7 +280,7 @@ fn without_audio_the_video_sets_the_length() {
     camera_clip(&folder.file("Camera.mov"));
     let take = take(
         &folder,
-        vec![TakeFile::captured(
+        vec![captured(
             folder.file("Camera.mov"),
             "camera",
             Some(CAMERA_OFFSET),
@@ -289,7 +303,7 @@ fn a_take_without_video_has_no_finished_video() {
     synth::write_wav(&folder.file("Stereo.wav"), 1.0);
     let take = take(
         &folder,
-        vec![TakeFile::new(folder.file("Stereo.wav"), TakeRole::Stereo)],
+        vec![audio(folder.file("Stereo.wav"), TakeRole::Stereo)],
     );
     let error = VideoComposer::make(&take, &VideoSettings::default(), |_| {}).unwrap_err();
     assert_eq!(
