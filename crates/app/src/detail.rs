@@ -68,6 +68,7 @@ impl Pane {
     pub fn new(mtm: MainThreadMarker, frame: NSRect) -> Pane {
         let root = Canvas::new(mtm, frame);
         root.on_resize(|| util::later(0.0, render));
+        root.on_draw(|r| draw::fill_rect(r, &NSColor::windowBackgroundColor()));
         let header_view = Canvas::new(mtm, rect(0.0, 0.0, frame.size.width, 80.0));
         root.addSubview(&header_view);
         let rule = Canvas::new(mtm, rect(0.0, 80.0, frame.size.width, 1.0));

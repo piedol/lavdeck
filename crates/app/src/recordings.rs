@@ -296,16 +296,7 @@ fn build() {
         | NSWindowStyleMask::Closable
         | NSWindowStyleMask::Resizable
         | NSWindowStyleMask::Miniaturizable;
-    // SAFETY: standard window initializer.
-    let window = unsafe {
-        NSWindow::initWithContentRect_styleMask_backing_defer(
-            NSWindow::alloc(mtm),
-            rect(0.0, 0.0, 1040.0, 640.0),
-            style,
-            NSBackingStoreType::Buffered,
-            false,
-        )
-    };
+    let window = crate::shots::window(rect(0.0, 0.0, 1040.0, 640.0), style);
     // SAFETY: kept in STATE until it closes.
     unsafe { window.setReleasedWhenClosed(false) };
     window.setTitle(&ns(&tr("Recordings")));
@@ -391,11 +382,11 @@ fn build() {
         objc2_app_kit::NSTableViewColumnAutoresizingStyle::LastColumnOnlyAutoresizingStyle,
     );
     for (column, title, min, ideal) in [
-        (Column::Recorded, tr("Recorded"), 120.0, 136.0),
-        (Column::Length, tr("Length"), 48.0, 56.0),
-        (Column::Video, tr("Video"), 40.0, 44.0),
-        (Column::Mics, tr("Mics"), 50.0, 80.0),
-        (Column::Transcript, tr("Transcript"), 80.0, 200.0),
+        (Column::Recorded, tr("Recorded"), 120.0, 140.0),
+        (Column::Length, tr("Length"), 48.0, 71.0),
+        (Column::Video, tr("Video"), 40.0, 59.0),
+        (Column::Mics, tr("Mics"), 50.0, 94.0),
+        (Column::Transcript, tr("Transcript"), 80.0, 100.0),
     ] {
         let c = NSTableColumn::initWithIdentifier(NSTableColumn::alloc(mtm), &ns(column.key()));
         c.setTitle(&ns(&title));
@@ -433,7 +424,7 @@ fn build() {
     split.adjustSubviews();
     if let Some(left) = split.subviews().firstObject() {
         let h = split.bounds().size.height;
-        left.setFrame(rect(0.0, 0.0, 540.0, h));
+        left.setFrame(rect(0.0, 0.0, 500.0, h));
         split.adjustSubviews();
     }
 

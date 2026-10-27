@@ -13,8 +13,8 @@ use objc2_app_kit::{
 };
 use objc2_core_graphics::CGContext;
 use objc2_foundation::{
-    NSArray, NSAttributedString, NSDictionary, NSMutableAttributedString, NSNumber, NSPoint,
-    NSRange, NSRect, NSSize, NSString,
+    NSAttributedString, NSDictionary, NSMutableAttributedString, NSNumber, NSPoint, NSRange,
+    NSRect, NSSize, NSString,
 };
 
 use crate::theme::{self, Weight};
@@ -268,15 +268,26 @@ pub fn highlighted(
     Retained::into_super(out)
 }
 
-/// An SF Symbol at a point size and weight, in one color (resolved for the current appearance).
+/// An SF Symbol at a point size and weight, in one colour (resolved for the current
+/// appearance), drawn monochrome as SwiftUI does: cut-outs stay transparent.
 pub fn symbol(name: &str, size: f64, weight: Weight, color: &NSColor) -> Option<Retained<NSImage>> {
     let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(&ns(name), None)?;
     let sized = NSImageSymbolConfiguration::configurationWithPointSize_weight(size, weight.ns());
-    let colored = NSImageSymbolConfiguration::configurationWithPaletteColors(
-        &NSArray::from_retained_slice(&[theme::resolved(color)]),
-    );
-    let config = sized.configurationByApplyingConfiguration(&colored);
-    image.imageWithSymbolConfiguration(&config)
+    let image = image.imageWithSymbolConfiguration(&sized)?;
+    let tint = theme::resolved(color);
+    let src = image.clone();
+    let handler = block2::RcBlock::new(move |r: NSRect| -> objc2::runtime::Bool {
+        src.drawInRect(r);
+        tint.set();
+        objc2_app_kit::NSRectFillUsingOperation(
+            r,
+            objc2_app_kit::NSCompositingOperation::SourceAtop,
+        );
+        objc2::runtime::Bool::YES
+    });
+    let tinted = NSImage::imageWithSize_flipped_drawingHandler(image.size(), false, &handler);
+    tinted.setAlignmentRect(image.alignmentRect());
+    Some(tinted)
 }
 
 /// Draws a symbol with its alignment rectangle centered on (`cx`, `cy`), as SwiftUI centers

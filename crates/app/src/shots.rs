@@ -80,3 +80,82 @@ pub fn write_window(window: &NSWindow, path: &Path) {
     frame_view.displayIfNeeded();
     write(&frame_view, path);
 }
+
+use std::cell::Cell;
+
+use objc2::{MainThreadOnly, define_class, msg_send};
+use objc2_app_kit::{NSBackingStoreType, NSWindowStyleMask};
+use objc2_foundation::NSRect;
+
+thread_local! {
+    /// Set for a `--snapshot-windows` run: windows draw as the active app's key window.
+    static KEY_LOOK: Cell<bool> = const { Cell::new(false) };
+}
+
+pub fn set_key_look(on: bool) {
+    KEY_LOOK.with(|k| k.set(on));
+}
+
+define_class!(
+    // SAFETY: NSWindow subclass that only reports itself active, so a snapshot shows the
+    // window as it looks in use without Lavdeck taking focus (as the Swift app's
+    // SnapshotWindow). It also stays where it's put.
+    #[unsafe(super = NSWindow)]
+    #[thread_kind = MainThreadOnly]
+    #[name = "LavdeckKeyLookWindow"]
+    struct KeyLookWindow;
+
+    impl KeyLookWindow {
+        #[unsafe(method(isKeyWindow))]
+        fn is_key(&self) -> bool {
+            true
+        }
+
+        #[unsafe(method(isMainWindow))]
+        fn is_main(&self) -> bool {
+            true
+        }
+
+        #[unsafe(method(_hasActiveAppearance))]
+        fn active(&self) -> bool {
+            true
+        }
+
+        #[unsafe(method(_hasActiveAppearanceIgnoringKeyFocus))]
+        fn active_ignoring(&self) -> bool {
+            true
+        }
+
+        #[unsafe(method(_hasActiveControls))]
+        fn active_controls(&self) -> bool {
+            true
+        }
+
+        #[unsafe(method(constrainFrameRect:toScreen:))]
+        fn constrain(&self, frame: NSRect, _screen: *mut objc2::runtime::AnyObject) -> NSRect {
+            frame
+        }
+    }
+);
+
+/// A window: an ordinary one, or in a snapshot run one that draws as active.
+pub fn window(frame: NSRect, style: NSWindowStyleMask) -> Retained<NSWindow> {
+    let mtm = crate::util::mtm();
+    if KEY_LOOK.with(|k| k.get()) {
+        // SAFETY: NSWindow's designated initializer.
+        let w: Retained<KeyLookWindow> = unsafe {
+            msg_send![KeyLookWindow::alloc(mtm), initWithContentRect: frame, styleMask: style, backing: NSBackingStoreType::Buffered, defer: false]
+        };
+        return Retained::into_super(w);
+    }
+    // SAFETY: NSWindow's designated initializer.
+    unsafe {
+        NSWindow::initWithContentRect_styleMask_backing_defer(
+            NSWindow::alloc(mtm),
+            frame,
+            style,
+            NSBackingStoreType::Buffered,
+            false,
+        )
+    }
+}

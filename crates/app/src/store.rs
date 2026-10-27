@@ -411,6 +411,11 @@ fn save_plugins(plugin: Option<&str>) {
 }
 
 pub fn set_launch_at_login(on: bool) {
+    // The demo never registers itself as a login item.
+    if with(|s| s.demo) {
+        update(|s| s.launch_at_login = on);
+        return;
+    }
     match crate::login::set(on) {
         Ok(()) => update(|s| s.launch_at_login = crate::login::enabled()),
         Err(e) => update(|s| s.last_error = Some(trf("Login item: {error}", &[("error", &e)]))),

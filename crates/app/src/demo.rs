@@ -973,9 +973,41 @@ fn build_take(
         f.path = folder.join(name);
         files.push(f);
     }
-    let mut meta = TakeFile::new(folder.join(format!("{stem}.take.json")), Role::Metadata);
-    meta.kind = None;
-    files.push(meta);
+    // The take's metadata, as Lavdeck writes it, so any reader of the folder sees the same take.
+    let meta_path = folder.join(format!("{stem}.take.json"));
+    let mics: Vec<serde_json::Value> = [(1u8, names.0, "a1b2c3"), (2, names.1, "d4e5f6")]
+        .iter()
+        .map(|(i, name, id)| {
+            let armed = kind != Kind::Solo || *i == 1;
+            let name = if name.is_empty() {
+                format!("TX{i}")
+            } else {
+                name.to_string()
+            };
+            serde_json::json!({"index": i, "name": name, "bluetoothID": id, "armed": armed})
+        })
+        .collect();
+    let media: Vec<serde_json::Value> = files
+        .iter()
+        .filter(|f| f.role == Role::Capture)
+        .map(|f| serde_json::json!({"file": f.name(), "source": f.source, "kind": f.kind, "offset": f.offset}))
+        .collect();
+    let mut meta = serde_json::json!({
+        "version": 1,
+        "started": iso8601(started),
+        "duration": length,
+        "channelMode": "stereo",
+        "format": format.key(),
+        "mics": mics,
+    });
+    if !media.is_empty() {
+        meta["media"] = serde_json::Value::Array(media);
+    }
+    let _ = std::fs::write(
+        &meta_path,
+        serde_json::to_string_pretty(&meta).unwrap_or_default(),
+    );
+    files.push(TakeFile::new(meta_path, Role::Metadata));
     files.sort_by(|a, b| a.path.cmp(&b.path));
     Take {
         id: format!("{day}/{stem}"),
@@ -983,13 +1015,28 @@ fn build_take(
         stem,
         started: Some(started),
         duration: Some(length),
-        channel_mode: Some(if kind == Kind::Solo {
-            "stereo".into()
-        } else {
-            "stereo".into()
-        }),
+        channel_mode: Some("stereo".into()),
         files,
         speakers,
+    }
+}
+
+/// `2026-10-26T15:05:09Z`, as Foundation's ISO 8601 encoder writes dates.
+fn iso8601(t: f64) -> String {
+    // SAFETY: gmtime_r fills the zeroed tm from a valid time.
+    unsafe {
+        let secs = t as libc::time_t;
+        let mut tm: libc::tm = std::mem::zeroed();
+        libc::gmtime_r(&secs, &mut tm);
+        format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+            tm.tm_year + 1900,
+            tm.tm_mon + 1,
+            tm.tm_mday,
+            tm.tm_hour,
+            tm.tm_min,
+            tm.tm_sec
+        )
     }
 }
 

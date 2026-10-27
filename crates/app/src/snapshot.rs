@@ -141,6 +141,7 @@ pub fn run(dir: PathBuf, demo_mode: bool) {
 /// Recordings (light and dark, one take and several selected) and each Settings tab.
 pub fn run_windows(dir: PathBuf) {
     let _ = std::fs::create_dir_all(&dir);
+    shots::set_key_look(true);
     util::later(0.5, move || {
         store::update(|s| demo::load(s, false));
         steps(dir, 0);

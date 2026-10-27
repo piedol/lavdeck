@@ -85,6 +85,11 @@ fn dynamic(
     unsafe { NSColor::colorWithName_dynamicProvider(None, &provider) }
 }
 
+/// A colour with a light and a dark value (the Increase Contrast variants follow them).
+pub fn pair(light: u32, dark: u32) -> Retained<NSColor> {
+    dynamic(light, dark, None, None)
+}
+
 macro_rules! tokens {
     ($($(#[$doc:meta])* $name:ident = $make:expr;)*) => {
         $(
