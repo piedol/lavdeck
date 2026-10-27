@@ -223,7 +223,7 @@ When a recording starts, Lavdeck launches the capture executable (the manifest's
 
 **Files.** Name files `<stem> <Source>.<ext>`, for example `14.02.11 Screen.mov` and `14.02.11 Camera.mov`. A capture plugin can also handle post events with its main executable, for example to compose a picture-in-picture video after the take.
 
-The `LavdeckPluginKit` Swift library has the types: `CaptureCommand.lines()`, `CaptureEvent.started(…).emit()`, `CaptureSpec`, `HostClock`.
+The `LavdeckPluginKit` Swift library (`sdk/swift`, the `LavdeckPluginKit` product of this repository's `Package.swift`) has the types: `CaptureCommand.lines()`, `CaptureEvent.started(…).emit()`, `CaptureSpec`, `HostClock`.
 
 ## App plugins
 

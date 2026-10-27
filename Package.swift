@@ -1,31 +1,19 @@
 // swift-tools-version: 6.0
+// Lavdeck's plugin SDK for Swift. The app itself is Rust (see Cargo.toml); this package is for
+// plugins written in Swift: the plugin protocol and transcript types, and a reader for the
+// take library.
 import PackageDescription
 
 let package = Package(
     name: "Lavdeck",
     platforms: [.macOS(.v15)],
     products: [
-        .library(name: "LavdeckKit", targets: ["LavdeckKit"]),
         .library(name: "LavdeckPluginKit", targets: ["LavdeckPluginKit"]),
-        .executable(name: "lavdeck", targets: ["lavdeck"]),
+        .library(name: "LavdeckKit", targets: ["LavdeckKit"]),
     ],
     targets: [
-        .target(name: "LavdeckPluginKit"),
-        .target(name: "LavdeckKit", dependencies: ["LavdeckPluginKit"], linkerSettings: [
-            .linkedFramework("IOKit"), .linkedFramework("IOUSBHost"), .linkedFramework("AVFoundation"),
-        ]),
-        .executableTarget(name: "lavdeck", dependencies: ["LavdeckKit"]),
-        // Screen and camera recording, the camera preview and each take's finished video. Swift 5 mode: it
-        // wraps AVFoundation and ScreenCaptureKit delegate callbacks that predate strict concurrency.
-        .target(name: "LavdeckCapture", dependencies: ["LavdeckKit", "LavdeckPluginKit"],
-                swiftSettings: [.swiftLanguageMode(.v5)],
-                linkerSettings: [
-                    .linkedFramework("ScreenCaptureKit"), .linkedFramework("AVFoundation"),
-                    .linkedFramework("CoreImage"), .linkedFramework("AppKit"),
-                ]),
-        .executableTarget(name: "LavdeckApp", dependencies: ["LavdeckKit", "LavdeckCapture"], linkerSettings: [
-            .linkedFramework("Carbon"), .linkedFramework("ServiceManagement"),
-        ]),
-        .testTarget(name: "LavdeckKitTests", dependencies: ["LavdeckKit", "LavdeckPluginKit", "LavdeckCapture"]),
+        .target(name: "LavdeckPluginKit", path: "sdk/swift/Sources/LavdeckPluginKit"),
+        .target(name: "LavdeckKit", dependencies: ["LavdeckPluginKit"], path: "sdk/swift/Sources/LavdeckKit",
+                linkerSettings: [.linkedFramework("AVFoundation")]),
     ]
 )

@@ -1,5 +1,5 @@
 //! Lavdeck's own screen and camera recording, the floating camera preview, and each take's finished
-//! picture-in-picture video. Ported from `Sources/LavdeckCapture`; see `docs/rust-port.md`.
+//! picture-in-picture video. See `docs/architecture.md`.
 //!
 //! Recording runs on the main thread with callbacks ([`VideoCapture`]); the composer
 //! ([`VideoComposer::make`]) blocks its calling thread, so run it off the main thread. Takes, capture

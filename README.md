@@ -5,7 +5,7 @@
 <h1 align="center">Lavdeck</h1>
 
 <p align="center">
-  A Mac menu bar app that shows the status of DJI Mic Series Mobile RX mics and controls their mode, gain and recording.
+  A Mac menu bar app that shows the status of DJI Mic Series Mobile RX mics and controls their mode, gain and recording, written in Rust.
 </p>
 
 <p align="center">
@@ -20,6 +20,10 @@
 Lavdeck controls a DJI Mic Series Mobile RX from your Mac's menu bar. Plug the receiver into the Mac and the deck shows both transmitters, with each mic's link state, live level, charging state and firmware. From the same window you switch the receiver between mono and stereo, set its gain from −12 to +12 dB, and record. In stereo, Lavdeck saves a 24-bit WAV file for each mic next to the stereo take.
 
 Lavdeck can record your screen and camera with the mics, keeps every take in a searchable Recordings window, and runs plugins for jobs such as transcription. It talks to the receiver directly over USB and sends it only four commands, each checked on the hardware: get version, get capabilities, set channel mode and set gain.
+
+The program file is 2.5 MB, and Lavdeck uses about 12 MB of memory with the receiver connected.
+
+Lavdeck is in English, Simplified Chinese, Japanese, German, French, Spanish, Brazilian Portuguese and Korean, and follows your system language. You can set Lavdeck's language in System Settings › General › Language & Region › Applications.
 
 Lavdeck is an independent project. It isn't made by DJI or affiliated with DJI.
 
@@ -150,7 +154,7 @@ Lavdeck can't update the mics' firmware. The deck marks a mic whose firmware is 
 
 ### Download
 
-Signed and notarized builds will be on the [Releases page](https://github.com/piedol/lavdeck/releases) as `Lavdeck-macOS-arm64.zip`. The first release isn't out yet. Until then, build Lavdeck from source.
+Download `Lavdeck-macOS-arm64.zip` from the [Releases page](https://github.com/piedol/lavdeck/releases). It's signed and notarized by Apple.
 
 1. Open the zip and drag **Lavdeck** into your Applications folder.
 2. Open Lavdeck. Its icon appears in the menu bar. Lavdeck has no Dock icon.
@@ -158,15 +162,15 @@ Signed and notarized builds will be on the [Releases page](https://github.com/pi
 
 ### Build from source
 
-You need Xcode 16 or later, or its Command Line Tools with Swift 6.
+You need Rust 1.98 or later ([rustup](https://rustup.rs)) and Xcode's Command Line Tools (`xcode-select --install`).
 
 ```bash
 git clone https://github.com/piedol/lavdeck.git
-cd lavdeck && scripts/build-app.sh
+cd lavdeck && scripts/bundle.sh
 ditto build/Lavdeck.app /Applications/Lavdeck.app && open /Applications/Lavdeck.app
 ```
 
-`scripts/build-app.sh` builds `build/Lavdeck.app` and signs it with the hardened runtime. It uses the code-signing identity in `LAVDECK_SIGN_IDENTITY`, or else the first line of a `.signing-identity` file in the checkout (a certificate name or SHA-1, ignored by git), or else the first Developer ID Application certificate in your keychain. Without any of these it signs ad hoc, which works on your Mac, but an ad-hoc signature changes with every build and macOS then asks for the microphone, camera and screen recording permissions again. Any identity in your keychain avoids that, including the free Apple Development certificate Xcode makes for your Apple Account.
+`scripts/bundle.sh` builds `build/Lavdeck.app` and signs it with the hardened runtime. It uses the code-signing identity in `LAVDECK_SIGN_IDENTITY`, or else the first line of a `.signing-identity` file in the checkout (a certificate name or SHA-1, ignored by git), or else the first Developer ID Application certificate in your keychain. Without any of these it signs ad hoc, which works on your Mac, but an ad-hoc signature changes with every build and macOS then asks for the microphone, camera and screen recording permissions again. Any identity in your keychain avoids that, including the free Apple Development certificate Xcode makes for your Apple Account.
 
 ### First launch
 
@@ -239,44 +243,47 @@ Install a plugin with **Settings › Plugins › Install Plugin…**, or with `l
 
 | Path | What it does |
 |---|---|
-| `Sources/LavdeckKit` | The USB link, DUML framing, the status decoder, the allowlisted commands, the recorder, the take library and the plugin and capture runners |
-| `Sources/LavdeckPluginKit` | The plugin protocol and transcript types, for plugins written in Swift |
-| `Sources/LavdeckCapture` | Screen and camera recording, the camera preview and each take's finished video |
-| `Sources/LavdeckApp` | The SwiftUI menu bar app: the deck, Recordings, Settings and permissions |
-| `Sources/lavdeck` | A command-line tool for scripting and debugging |
-| `Tests` | The decoder and framing on frames captured from the receiver, the take library, plugins and capture |
+| `crates/kit` | The USB link, DUML framing, the status decoder, the allowlisted commands, the recorder, the take library, the plugin protocol and the plugin and capture runners. Its tests run the decoder and framing on frames captured from the receiver |
+| `crates/capture` | Screen and camera recording, the camera preview and each take's finished video |
+| `crates/app` | The AppKit menu bar app: the deck, Recordings, Settings, permissions and the demo and snapshot modes |
+| `crates/cli` | The `lavdeck` command-line tool, for scripting and debugging |
+| `locales` | The translations, keyed by the English text |
+| `sdk/swift` | `LavdeckPluginKit` and the take library reader, for plugins written in Swift (`Package.swift` builds only these) |
 | `Examples/plugins` | The example plugin and its Python helper |
-| `scripts` | The app build, the icon and the README images |
+| `scripts` | The app bundle, the icon and the README images |
 
 ```bash
-swift build && swift test                          # build everything and run the tests
-scripts/build-app.sh                               # build and sign build/Lavdeck.app
-scripts/build-app.sh --notarize                    # also notarize it and zip dist/Lavdeck-macOS-arm64.zip
-swift run LavdeckApp --demo --snapshot /tmp/deck   # draw the deck with made-up mics, no receiver needed
-swift scripts/make-showcase.swift                  # redraw docs/images/showcase.png and social-preview.png
+cargo test                                           # build everything and run the tests
+scripts/bundle.sh                                    # build and sign build/Lavdeck.app
+scripts/bundle.sh --notarize                         # also notarize it and zip dist/Lavdeck-macOS-arm64.zip
+build/Lavdeck.app/Contents/MacOS/Lavdeck --demo      # run with made-up mics, no receiver needed
+build/Lavdeck.app/Contents/MacOS/Lavdeck --demo --snapshot /tmp/deck   # draw the deck and menu bar icons to PNG
+swift scripts/make-showcase.swift                    # redraw docs/images/showcase.png and social-preview.png
 ```
+
+Add `-AppleLanguages '(de)'` to run or draw it in another language.
 
 `--notarize` needs a Developer ID Application certificate and a notarytool keychain profile, named by `NOTARY_PROFILE` (default `piedol-notary`).
 
 The `lavdeck` tool reads and changes the receiver from the terminal. Quit the app before running commands that use the receiver, because two Lavdeck processes can't talk to it at once. `takes`, `plugins` and `run` don't use the receiver.
 
 ```bash
-swift build -c release --product lavdeck
-.build/release/lavdeck status --json           # live status (read-only)
-.build/release/lavdeck caps                    # what the receiver supports (read-only)
-.build/release/lavdeck set channel stereo      # or mono
-.build/release/lavdeck set gain 6              # −12 to +12 dB
-.build/release/lavdeck takes                   # list recordings
-.build/release/lavdeck run <plugin-id> <action> <take-id>
+cargo build --release -p lavdeck-cli
+target/release/lavdeck status --json           # live status (read-only)
+target/release/lavdeck caps                    # what the receiver supports (read-only)
+target/release/lavdeck set channel stereo      # or mono
+target/release/lavdeck set gain 6              # −12 to +12 dB
+target/release/lavdeck takes                   # list recordings
+target/release/lavdeck run <plugin-id> <action> <take-id>
 ```
 
 ### Contributing
 
-Bug reports and pull requests are welcome, especially from people with other DJI receivers or transmitters. `lavdeck status --json` and `lavdeck caps` are read-only. Include their output in your report, with the serial numbers and Bluetooth IDs removed. Before opening a pull request, run `swift build` and `swift test`.
+Bug reports and pull requests are welcome, especially from people with other DJI receivers or transmitters. `lavdeck status --json` and `lavdeck caps` are read-only. Include their output in your report, with the serial numbers and Bluetooth IDs removed. Before opening a pull request, run `cargo test`, `cargo clippy --all-targets -- -D warnings` and `cargo fmt --check`.
 
 ## Credits
 
-Lavdeck uses only Apple's frameworks: SwiftUI, AppKit, AVFoundation, ScreenCaptureKit, IOKit and IOUSBHost. It contains no DJI code. [docs/PROTOCOL.md](docs/PROTOCOL.md) explains how the receiver's protocol was worked out.
+Lavdeck uses Apple's frameworks (AppKit, AVFoundation, ScreenCaptureKit, IOKit and IOUSBHost) through the [objc2](https://github.com/madsmtm/objc2) Rust bindings. It contains no DJI code. [docs/PROTOCOL.md](docs/PROTOCOL.md) explains how the receiver's protocol was worked out.
 
 DJI and DJI Mic are trademarks of SZ DJI Technology Co., Ltd., used here only to say which hardware Lavdeck works with.
 

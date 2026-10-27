@@ -102,7 +102,7 @@ Request: `index (u32 LE) | capability id (u16 LE)` with `0` = all, `5` = channel
 
 ## What Lavdeck sends
 
-Lavdeck sends only these commands, built by `MicCommand` in `Sources/LavdeckKit/Commands.swift`:
+Lavdeck sends only these commands, built by `crates/kit/src/commands.rs`:
 
 - `0x00/0x01` get version
 - `0x5B/0x12` get capability
