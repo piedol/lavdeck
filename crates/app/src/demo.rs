@@ -399,8 +399,17 @@ impl Backend for Demo {
                     with_demo(|d| d.add_file(&take.id, transcript_file(&take)));
                     Some(trn(1, "{n} file", "{n} files"))
                 } else {
-                    let _ = &root;
-                    Some(crate::i18n::tr("Saved"))
+                    // The finished video: the stand-in movie, as `<stem> PiP.mp4`.
+                    let path = take.folder.join(format!("{} PiP.mp4", take.stem));
+                    link(&clips(&root).finished, &path);
+                    let mut f = TakeFile::new(path, Role::Derived);
+                    f.kind = Some("video".into());
+                    f.source = Some("pip".into());
+                    with_demo(|d| d.add_file(&take.id, f));
+                    Some(crate::i18n::trf(
+                        "Saved {file}",
+                        &[("file", &format!("{} PiP.mp4", take.stem))],
+                    ))
                 };
                 store::job_finished(id, JobState::Finished(note));
             });
@@ -756,6 +765,10 @@ struct Clips {
     stereo: PathBuf,
     tx1: PathBuf,
     tx2: PathBuf,
+    /// Stands in for every screen and camera recording.
+    movie: PathBuf,
+    /// Stands in for every finished video.
+    finished: PathBuf,
 }
 
 fn clips(root: &Path) -> Clips {
@@ -764,6 +777,8 @@ fn clips(root: &Path) -> Clips {
         stereo: dir.join("stereo.wav"),
         tx1: dir.join("tx1.wav"),
         tx2: dir.join("tx2.wav"),
+        movie: dir.join("capture.mov"),
+        finished: dir.join("finished.mp4"),
     };
     if !(c.stereo.exists() && c.tx1.exists() && c.tx2.exists()) {
         let _ = std::fs::create_dir_all(&dir);
@@ -969,8 +984,16 @@ fn build_take(
         f.kind = Some("video".into());
         f.source = Some(source.to_string());
         f.offset = (*source != "pip").then_some(0.0);
-        // No demo video is generated: these show as missing files.
-        f.path = folder.join(name);
+        let path = folder.join(name);
+        link(
+            if *source == "pip" {
+                &clips.finished
+            } else {
+                &clips.movie
+            },
+            &path,
+        );
+        f.path = path;
         files.push(f);
     }
     // The take's metadata, as Lavdeck writes it, so any reader of the folder sees the same take.
@@ -1040,7 +1063,33 @@ fn iso8601(t: f64) -> String {
     }
 }
 
+/// Makes the stand-in movies in the background, once: they take a few seconds.
+fn make_movies(root: &Path) {
+    let c = clips(root);
+    for path in [c.movie, c.finished] {
+        if path.exists() {
+            continue;
+        }
+        std::thread::spawn(move || {
+            // Written under a name of its own, then moved into place when complete.
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("mov")
+                .to_string();
+            let partial = path.with_extension(format!("{}.part.{ext}", std::process::id()));
+            match crate::demo_video::write(&partial, CLIP_SECONDS) {
+                Ok(()) => {
+                    let _ = std::fs::rename(&partial, &path);
+                }
+                Err(e) => crate::util::log(format!("demo: no movie ({e})")),
+            }
+        });
+    }
+}
+
 fn library(root: &Path) -> Vec<Take> {
+    make_movies(root);
     entries()
         .into_iter()
         .map(|e| {

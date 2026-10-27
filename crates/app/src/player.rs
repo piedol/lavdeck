@@ -90,7 +90,7 @@ fn make() -> Player {
     let observer = unsafe {
         av.addPeriodicTimeObserverForInterval_queue_usingBlock(
             cm(0.1),
-            Some(&dispatch2::DispatchQueue::main()),
+            Some(dispatch2::DispatchQueue::main()),
             &tick,
         )
     };

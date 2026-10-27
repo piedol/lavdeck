@@ -167,9 +167,13 @@ fn install_main_menu(mtm: MainThreadMarker) {
     edit.addItem(&item(&tr("Find"), sel!(performFindPanelAction:), "f", cmd));
     let window = NSMenu::initWithTitle(NSMenu::alloc(mtm), &ns(&tr("Window")));
     window.addItem(&item(&tr("Close"), sel!(performClose:), "w", cmd));
-    for (title, sub) in [("Lavdeck", app_menu), ("Edit", edit), ("Window", window)] {
+    for (title, sub) in [
+        ("Lavdeck".to_string(), app_menu),
+        (tr("Edit"), edit),
+        (tr("Window"), window),
+    ] {
         let top = item(
-            title,
+            &title,
             sel!(submenuAction:),
             "",
             NSEventModifierFlags::empty(),
@@ -182,5 +186,9 @@ fn install_main_menu(mtm: MainThreadMarker) {
 
 /// Brings Lavdeck forward (a menu bar app isn't frontmost, so its windows would open behind).
 pub fn activate() {
+    // A scripted run never takes focus from the app in front.
+    if crate::drive::driving() {
+        return;
+    }
     NSApplication::sharedApplication(util::mtm()).activate();
 }

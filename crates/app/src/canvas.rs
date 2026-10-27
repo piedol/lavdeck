@@ -46,7 +46,6 @@ type Hover = Rc<dyn Fn(bool)>;
 pub struct CanvasIvars {
     draw: RefCell<Option<Draw>>,
     click: RefCell<Option<Action>>,
-    double_click: RefCell<Option<Action>>,
     drag: RefCell<Option<Drag>>,
     menu: RefCell<Option<MenuMaker>>,
     hover: RefCell<Option<Hover>>,
@@ -112,6 +111,10 @@ define_class!(
 
         #[unsafe(method(hitTest:))]
         fn hit_test(&self, point: NSPoint) -> *mut NSView {
+            // SAFETY: plain call to the superclass implementation.
+            let hit: *mut NSView = unsafe { msg_send![super(self), hitTest: point] };
+            // A decorative canvas lets clicks through to what's under it; its subviews still
+            // get theirs.
             let iv = self.ivars();
             let interactive = iv.click.borrow().is_some()
                 || iv.drag.borrow().is_some()
@@ -119,11 +122,10 @@ define_class!(
                 || iv.hover.borrow().is_some()
                 || !iv.drag_out.borrow().is_empty()
                 || self.toolTip().is_some();
-            if !interactive {
+            if std::ptr::eq(hit, self as *const Canvas as *const NSView) && !interactive {
                 return std::ptr::null_mut();
             }
-            // SAFETY: plain call to the superclass implementation.
-            unsafe { msg_send![super(self), hitTest: point] }
+            hit
         }
 
         #[unsafe(method(mouseDown:))]
@@ -131,12 +133,6 @@ define_class!(
             let p = self.local(event);
             let iv = self.ivars();
             iv.down_at.set(Some(p));
-            if event.clickCount() == 2
-                && let Some(f) = iv.double_click.borrow().clone()
-            {
-                f();
-                return;
-            }
             if let Some(drag) = iv.drag.borrow().clone() {
                 drag(DragPhase::Began, p);
             } else if iv.click.borrow().is_some() {
@@ -263,7 +259,6 @@ impl Canvas {
     pub fn reset(&self) {
         let iv = self.ivars();
         iv.click.replace(None);
-        iv.double_click.replace(None);
         iv.drag.replace(None);
         iv.menu.replace(None);
         let had_hover = iv.hover.replace(None).is_some();
@@ -288,11 +283,6 @@ impl Canvas {
 
     pub fn on_click(&self, f: impl Fn() + 'static) -> &Self {
         self.ivars().click.replace(Some(Rc::new(f)));
-        self
-    }
-
-    pub fn on_double_click(&self, f: impl Fn() + 'static) -> &Self {
-        self.ivars().double_click.replace(Some(Rc::new(f)));
         self
     }
 
@@ -578,10 +568,13 @@ pub fn disabled_item(title: &str) -> Retained<NSMenuItem> {
 /// leaving), and Escape.
 #[derive(Default)]
 pub struct FieldIvars {
-    pub changed: RefCell<Option<Box<dyn Fn(String)>>>,
-    pub ended: RefCell<Option<Box<dyn Fn(String)>>>,
+    pub changed: RefCell<Option<TextHandler>>,
+    pub ended: RefCell<Option<TextHandler>>,
     pub cancelled: RefCell<Option<Box<dyn Fn()>>>,
 }
+
+/// Called with a text field's text.
+pub type TextHandler = Box<dyn Fn(String)>;
 
 define_class!(
     // SAFETY: NSObject subclass acting as a text field delegate; no Drop impl beyond the ivars.

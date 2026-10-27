@@ -552,7 +552,11 @@ pub fn reveal_recordings() {
 }
 
 // MARK: Backend callbacks
+//
+// The demo drives the model directly; the kit and capture backend (phase 2) reports through
+// `receiver_status`, `receiver_connected` and `capture_failed` too.
 
+#[allow(dead_code)]
 pub fn receiver_status(status: MicStatus) {
     update(|s| {
         if s.demo {
@@ -567,6 +571,7 @@ pub fn receiver_status(status: MicStatus) {
     });
 }
 
+#[allow(dead_code)]
 pub fn receiver_connected(connected: bool) {
     update(|s| s.is_connected = connected);
 }
@@ -588,6 +593,7 @@ pub fn capture_started(source: &str) {
     });
 }
 
+#[allow(dead_code)]
 pub fn capture_failed(message: String) {
     update(|s| s.last_error = Some(message));
 }

@@ -111,6 +111,7 @@ pub struct Text {
     pub kern: f64,
     pub strike: bool,
     pub line_break: NSLineBreakMode,
+    pub align: objc2_app_kit::NSTextAlignment,
 }
 
 impl Text {
@@ -126,6 +127,7 @@ impl Text {
             kern: 0.0,
             strike: false,
             line_break: NSLineBreakMode::ByTruncatingTail,
+            align: objc2_app_kit::NSTextAlignment::Natural,
         }
     }
 
@@ -144,6 +146,11 @@ impl Text {
         self
     }
 
+    pub fn centered(mut self) -> Text {
+        self.align = objc2_app_kit::NSTextAlignment::Center;
+        self
+    }
+
     pub fn wrapping(mut self) -> Text {
         self.line_break = NSLineBreakMode::ByWordWrapping;
         self
@@ -152,6 +159,7 @@ impl Text {
     pub fn attributed(&self) -> Retained<NSAttributedString> {
         let style = NSMutableParagraphStyle::new();
         style.setLineBreakMode(self.line_break);
+        style.setAlignment(self.align);
         let kern = NSNumber::new_f64(self.kern);
         let strike = NSNumber::new_isize(if self.strike { 1 } else { 0 });
         // SAFETY: AppKit's attribute keys, each with a value of the documented type.

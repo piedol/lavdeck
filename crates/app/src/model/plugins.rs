@@ -37,6 +37,8 @@ impl JsonValue {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+// `String` settings come from installed plugins' manifests (phase 2); the demo has none.
+#[allow(dead_code)]
 pub enum SettingKind {
     Bool,
     String,

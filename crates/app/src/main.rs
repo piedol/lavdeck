@@ -9,6 +9,7 @@ mod backend;
 mod canvas;
 mod deck;
 mod demo;
+mod demo_video;
 mod detail;
 mod draw;
 mod drive;

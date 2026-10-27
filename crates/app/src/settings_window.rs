@@ -15,7 +15,7 @@ use objc2_app_kit::{
     NSPopUpButton, NSScrollView, NSSwitch, NSTabViewController, NSTabViewControllerTabStyle,
     NSTabViewItem, NSTextField, NSViewController, NSWindow, NSWindowDelegate, NSWindowStyleMask,
 };
-use objc2_foundation::{NSNotification, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize};
+use objc2_foundation::{NSNotification, NSObject, NSObjectProtocol, NSPoint, NSSize};
 
 use crate::canvas::{Build, Canvas, FieldDelegate, Layer, on_action};
 use crate::draw::{self, Text, rect};
@@ -1233,4 +1233,41 @@ pub fn draw_for_shots(path: &std::path::Path) {
     if let Some(w) = STATE.with(|s| s.borrow().as_ref().map(|s| s.window.clone())) {
         crate::shots::write_window(&w, path);
     }
+}
+
+// MARK: Scripted checks
+
+pub fn park_for_drive() {
+    if let Some(w) = STATE.with(|s| s.borrow().as_ref().map(|s| s.window.clone()))
+        && let Some(screen) = objc2_app_kit::NSScreen::mainScreen(util::mtm())
+    {
+        let f = screen.frame();
+        w.setFrameOrigin(NSPoint::new(
+            f.origin.x + f.size.width - 2.0,
+            f.origin.y + 40.0,
+        ));
+    }
+}
+
+/// Clicks a control by its key, on whichever tab has it.
+pub fn click_for_drive(key: &str) {
+    let view = STATE.with(|s| {
+        s.borrow()
+            .as_ref()
+            .and_then(|s| s.pages.iter().find_map(|p| p.layer.get(key)))
+    });
+    if let Some(c) = view.and_then(|v| v.downcast::<objc2_app_kit::NSControl>().ok()) {
+        // SAFETY: a plain click on a control in this window.
+        unsafe { c.performClick(None) };
+    }
+}
+
+pub fn select_tab_for_drive(tab: usize) {
+    if let Some(tabs) = STATE.with(|s| s.borrow().as_ref().map(|s| s.tabs.clone())) {
+        tabs.setSelectedTabViewItemIndex(tab as isize);
+    }
+}
+
+pub fn shot_for_drive(path: &std::path::Path) {
+    draw_for_shots(path);
 }

@@ -51,11 +51,6 @@ pub fn look(appearance: &NSAppearance) -> Look {
     }
 }
 
-/// The appearance AppKit is drawing in right now.
-pub fn current_look() -> Look {
-    look(&NSAppearance::currentDrawingAppearance())
-}
-
 fn dynamic(
     light: u32,
     dark: u32,

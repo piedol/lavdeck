@@ -69,13 +69,13 @@ struct Ui {
 }
 
 thread_local! {
-    static UI: Ui = Ui {
+    static UI: Ui = const { Ui {
         editing: Cell::new(None),
         peaks: RefCell::new([(0.0, 0.0); 3]),
         lit: Cell::new([-1; 3]),
         drag_index: Cell::new(None),
         was_recording: Cell::new(false),
-    };
+    } };
 }
 
 /// Where the deck's buttons lead, outside the deck.

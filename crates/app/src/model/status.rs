@@ -5,12 +5,15 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Receiver channel mode. The Mobile RX reports 0 for mono and 2 for stereo.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+// `Other` and the raw conversions are the kit backend's (phase 2); the demo is always 0 or 2.
+#[allow(dead_code)]
 pub enum ChannelMode {
     Mono,
     Stereo,
     Other(u8),
 }
 
+#[allow(dead_code)]
 impl ChannelMode {
     pub fn from_raw(raw: u8) -> ChannelMode {
         match raw {

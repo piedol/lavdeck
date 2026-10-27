@@ -51,8 +51,10 @@ define_class!(
     unsafe impl NSWindowDelegate for PanelDelegate {
         #[unsafe(method(windowDidResignKey:))]
         fn did_resign_key(&self, _n: &NSNotification) {
-            // Another of Lavdeck's windows (Recordings, Settings, a menu) took focus.
-            util::main_async(close);
+            // Another window took focus. A scripted run opens and closes the deck itself.
+            if !crate::drive::driving() {
+                util::main_async(close);
+            }
         }
     }
 );
@@ -191,7 +193,11 @@ pub fn open() {
     } {
         monitors.push(m);
     }
-    let outside = RcBlock::new(|_e: NonNull<NSEvent>| util::main_async(close));
+    let outside = RcBlock::new(|_e: NonNull<NSEvent>| {
+        if !crate::drive::driving() {
+            util::main_async(close)
+        }
+    });
     if let Some(m) = NSEvent::addGlobalMonitorForEventsMatchingMask_handler(
         NSEventMask::LeftMouseDown | NSEventMask::RightMouseDown | NSEventMask::OtherMouseDown,
         &outside,

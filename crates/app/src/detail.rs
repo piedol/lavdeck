@@ -109,6 +109,13 @@ impl Pane {
     }
 }
 
+impl Pane {
+    /// A view in the scrolling body by its key (scripted checks).
+    pub fn body_view(&self, key: &str) -> Option<Retained<NSView>> {
+        self.body.get(key)
+    }
+}
+
 /// What the pane shows now.
 enum Mode {
     One(Take),
@@ -148,6 +155,11 @@ pub fn render() {
     let changed = UI.with(|u| u.take.replace(take_id.clone()) != take_id);
     if changed {
         UI.with(|u| u.following.set(true));
+        // Another take starts at its top.
+        if let Some(p) = recordings::with(|s| s.detail.clone()) {
+            p.scroll.contentView().scrollToPoint(NSPoint::new(0.0, 0.0));
+            p.scroll.reflectScrolledClipView(&p.scroll.contentView());
+        }
         if let Mode::One(t) = &mode {
             load_default(t);
         }
@@ -351,6 +363,7 @@ fn caps_label(b: &mut Build, key: &str, text: &str, x: f64, y: f64) -> f64 {
 }
 
 /// A stock push button with an optional SF Symbol, sized to fit.
+#[allow(clippy::too_many_arguments)]
 fn button(
     b: &mut Build,
     key: &str,
@@ -409,7 +422,7 @@ fn button_width(title: &str, symbol: bool, small: bool) -> f64 {
 }
 
 /// ContentUnavailableView: a large symbol, a title and a line of explanation, centered.
-fn unavailable(
+pub fn unavailable(
     b: &mut Build,
     symbol: &str,
     title: &str,
@@ -422,7 +435,11 @@ fn unavailable(
         theme::font(17.0, Weight::Bold),
         primary(),
     );
-    let desc = description.map(|d| Text::new(d.to_string(), body_font(), secondary()).wrapping());
+    let desc = description.map(|d| {
+        Text::new(d.to_string(), body_font(), secondary())
+            .wrapping()
+            .centered()
+    });
     let dw = (width - 80.0).clamp(100.0, 360.0);
     let dh = desc.as_ref().map_or(0.0, |d| d.wrapped_height(dw));
     let total = 44.0 + 12.0 + title_t.height() + if desc.is_some() { 6.0 + dh } else { 0.0 };
@@ -440,10 +457,6 @@ fn unavailable(
             );
             title_t.draw_at(((r.size.width - title_t.width()) / 2.0).round(), 56.0);
             if let Some(d) = &desc {
-                let d = d.clone();
-                let style = objc2_app_kit::NSMutableParagraphStyle::new();
-                style.setAlignment(objc2_app_kit::NSTextAlignment::Center);
-                let _ = style;
                 d.draw_in(rect(
                     ((r.size.width - dw) / 2.0).round(),
                     56.0 + title_t.height() + 6.0,
@@ -1088,13 +1101,7 @@ fn files(b: &mut Build, take: &Take, mut y: f64, w: f64) -> f64 {
         .copied()
         .filter(|f| f.kind.as_deref() == Some("transcript"))
         .collect();
-    let mut rows: Vec<(
-        String,
-        String,
-        &'static str,
-        Vec<PathBuf>,
-        Option<TakeMedia>,
-    )> = all
+    let mut rows: Vec<FileRow> = all
         .iter()
         .filter(|f| f.kind.as_deref() != Some("transcript"))
         .map(|f| {
@@ -1213,6 +1220,15 @@ fn files(b: &mut Build, take: &Take, mut y: f64, w: f64) -> f64 {
     }
     y
 }
+
+/// A file row: name, what it is, its symbol, the files it stands for, and what plays it.
+type FileRow = (
+    String,
+    String,
+    &'static str,
+    Vec<PathBuf>,
+    Option<TakeMedia>,
+);
 
 fn file_menu(paths: &[PathBuf]) -> Retained<NSMenu> {
     let mtm = util::mtm();
@@ -1918,7 +1934,7 @@ fn several_body(
             }
         });
         let hk = key.clone();
-        c.on_click(move || run()).on_hover(move |inside| {
+        c.on_click(run).on_hover(move |inside| {
             UI.with(|u| *u.hover.borrow_mut() = inside.then(|| hk.clone()));
             if let Some(v) = recordings::with(|s| s.detail.body.get(&hk)).flatten() {
                 v.setNeedsDisplay(true);

@@ -110,7 +110,7 @@ pub fn same_day(a: f64, b: f64) -> bool {
 /// A gain step on the fader scale: `+12`, `0 dB`, `−6` (a true minus sign).
 pub fn gain_step(db: i32) -> String {
     match db {
-        0 => "0 dB".into(),
+        0 => crate::i18n::tr("0 dB"),
         d if d > 0 => format!("+{d}"),
         d => format!("\u{2212}{}", -d),
     }

@@ -66,14 +66,6 @@ pub fn state(permission: &str) -> State {
     }
 }
 
-pub fn granted(permissions: &[&str]) -> Vec<String> {
-    permissions
-        .iter()
-        .filter(|p| state(p) == State::Granted)
-        .map(|p| p.to_string())
-        .collect()
-}
-
 /// Asks for any of `permissions` not yet granted: the system prompt for camera and microphone,
 /// macOS's screen recording prompt at most once per launch.
 pub fn request(permissions: &[&str]) {
@@ -103,10 +95,8 @@ pub fn request(permissions: &[&str]) {
                 // SAFETY: a valid media type; the block may run on any thread and only queues work.
                 unsafe { AVCaptureDevice::requestAccessForMediaType_completionHandler(ty, &done) };
             }
-            SCREEN => {
-                if !ASKED_SCREEN.with(|a| a.replace(true)) {
-                    let _ = CGRequestScreenCaptureAccess();
-                }
+            SCREEN if !ASKED_SCREEN.with(|a| a.replace(true)) => {
+                let _ = CGRequestScreenCaptureAccess();
             }
             _ => {}
         }

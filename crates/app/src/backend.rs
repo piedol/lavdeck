@@ -100,15 +100,15 @@ impl Backend for Offline {
     fn start(&self) {}
 
     fn set_channel(&self, _mode: ChannelMode, done: Done) {
-        done(Err("no receiver".into()));
+        done(Err(crate::i18n::tr("The receiver isn’t connected.")));
     }
 
     fn set_gain(&self, _db: i32, done: Done) {
-        done(Err("no receiver".into()));
+        done(Err(crate::i18n::tr("The receiver isn’t connected.")));
     }
 
     fn start_recording(&self, _request: RecordRequest, done: Done) {
-        done(Err("no receiver".into()));
+        done(Err(crate::i18n::tr("The receiver isn’t connected.")));
     }
 
     fn stop_recording(&self) {}
@@ -126,7 +126,7 @@ impl Backend for Offline {
     }
 
     fn trash(&self, _take: &Take) -> Result<(), String> {
-        Err("not available yet".into())
+        Err(crate::i18n::tr("This isn’t available yet."))
     }
 
     fn discover_plugins(&self) -> (Vec<Plugin>, Vec<String>) {
@@ -134,7 +134,7 @@ impl Backend for Offline {
     }
 
     fn install_plugin(&self, _folder: &Path) -> Result<(), String> {
-        Err("not available yet".into())
+        Err(crate::i18n::tr("This isn’t available yet."))
     }
 
     fn plugins_folder(&self) -> PathBuf {
@@ -146,7 +146,9 @@ impl Backend for Offline {
         crate::util::main_async(move || {
             crate::store::job_finished(
                 id,
-                crate::model::plugins::JobState::Failed("not available yet".into()),
+                crate::model::plugins::JobState::Failed(crate::i18n::tr(
+                    "This isn’t available yet.",
+                )),
             )
         });
     }
@@ -154,7 +156,7 @@ impl Backend for Offline {
     fn cancel(&self, _job_id: u64) {}
 
     fn open_in_app(&self, _take: &Take, _plugin: &Plugin) -> Result<(), String> {
-        Err("not available yet".into())
+        Err(crate::i18n::tr("This isn’t available yet."))
     }
 
     fn save_settings(&self, settings: &Settings) {

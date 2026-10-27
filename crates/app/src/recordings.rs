@@ -14,24 +14,23 @@ use std::ptr::NonNull;
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, ProtocolObject};
-use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, Message, define_class, msg_send, sel};
+use objc2::{DefinedClass, MainThreadOnly, Message, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSAlert, NSAlertStyle, NSAppearanceCustomization, NSApplication, NSAutoresizingMaskOptions,
-    NSBackingStoreType, NSControlSize, NSControlTextEditingDelegate, NSEvent, NSEventMask,
-    NSEventModifierFlags, NSImage, NSImageView, NSLineBreakMode, NSMenu, NSMenuItem, NSPopUpButton,
-    NSProgressIndicator, NSProgressIndicatorStyle, NSScrollView, NSSearchField,
-    NSSearchToolbarItem, NSSplitView, NSSplitViewDelegate, NSSplitViewDividerStyle,
-    NSTableCellView, NSTableColumn, NSTableView, NSTableViewDataSource, NSTableViewDelegate,
-    NSTableViewStyle, NSTextField, NSToolbar, NSToolbarDelegate,
-    NSToolbarFlexibleSpaceItemIdentifier, NSToolbarItem, NSView, NSWindow, NSWindowDelegate,
-    NSWindowStyleMask, NSWindowToolbarStyle,
+    NSAlert, NSAlertStyle, NSAppearanceCustomization, NSAutoresizingMaskOptions, NSControlSize,
+    NSControlTextEditingDelegate, NSEvent, NSEventMask, NSEventModifierFlags, NSImage, NSImageView,
+    NSLineBreakMode, NSMenu, NSMenuItem, NSPopUpButton, NSProgressIndicator,
+    NSProgressIndicatorStyle, NSScrollView, NSSearchField, NSSearchToolbarItem, NSSplitView,
+    NSSplitViewDelegate, NSSplitViewDividerStyle, NSTableCellView, NSTableColumn, NSTableView,
+    NSTableViewDataSource, NSTableViewDelegate, NSTableViewStyle, NSTextField, NSToolbar,
+    NSToolbarDelegate, NSToolbarFlexibleSpaceItemIdentifier, NSToolbarItem, NSView, NSWindow,
+    NSWindowDelegate, NSWindowStyleMask, NSWindowToolbarStyle,
 };
 use objc2_foundation::{
-    NSArray, NSIndexSet, NSInteger, NSNotification, NSObject, NSObjectProtocol, NSPoint,
-    NSSortDescriptor, NSString,
+    NSArray, NSIndexSet, NSInteger, NSNotification, NSObject, NSObjectProtocol, NSSortDescriptor,
+    NSString,
 };
 
-use crate::canvas::{FieldDelegate, item, on_action};
+use crate::canvas::{FieldDelegate, item};
 use crate::draw::rect;
 use crate::i18n::{tr, trf, trn};
 use crate::model::plugins::VIDEO_JOB_ID;
@@ -49,6 +48,7 @@ pub struct State {
     search_field: Retained<NSSearchField>,
     filter_button: Retained<NSPopUpButton>,
     pub detail: std::rc::Rc<detail::Pane>,
+    overlay: std::rc::Rc<crate::canvas::Layer>,
     pub takes: Vec<Take>,
     pub transcripts: HashMap<String, TranscriptDocument>,
     pub rows: Vec<Row>,
@@ -202,6 +202,12 @@ define_class!(
             let lw = left.frame().size.width.min(b.size.width - 460.0 - d).max(460.0);
             left.setFrame(rect(0.0, 0.0, lw, b.size.height));
             views.objectAtIndex(1).setFrame(rect(lw + d, 0.0, (b.size.width - lw - d).max(0.0), b.size.height));
+            // The Transcript column takes what's left of the table's width.
+            util::later(0.0, || {
+                if let Some(t) = with(|s| s.table.clone()) {
+                    t.sizeLastColumnToFit();
+                }
+            });
         }
     }
 
@@ -382,11 +388,11 @@ fn build() {
         objc2_app_kit::NSTableViewColumnAutoresizingStyle::LastColumnOnlyAutoresizingStyle,
     );
     for (column, title, min, ideal) in [
-        (Column::Recorded, tr("Recorded"), 120.0, 140.0),
-        (Column::Length, tr("Length"), 48.0, 71.0),
-        (Column::Video, tr("Video"), 40.0, 59.0),
-        (Column::Mics, tr("Mics"), 50.0, 94.0),
-        (Column::Transcript, tr("Transcript"), 80.0, 100.0),
+        (Column::Recorded, tr("Recorded"), 120.0, 136.0),
+        (Column::Length, tr("Length"), 48.0, 56.0),
+        (Column::Video, tr("Video"), 40.0, 44.0),
+        (Column::Mics, tr("Mics"), 50.0, 80.0),
+        (Column::Transcript, tr("Transcript"), 60.0, 100.0),
     ] {
         let c = NSTableColumn::initWithIdentifier(NSTableColumn::alloc(mtm), &ns(column.key()));
         c.setTitle(&ns(&title));
@@ -417,12 +423,26 @@ fn build() {
     table.sizeLastColumnToFit();
     scroll.setHasVerticalScroller(true);
     scroll.setAutohidesScrollers(true);
-    split.addSubview(&scroll);
+    // Over the table: what to do when nothing matches the filter or search.
+    let left = NSView::initWithFrame(NSView::alloc(mtm), rect(0.0, 0.0, 500.0, 600.0));
+    scroll.setFrame(left.bounds());
+    scroll.setAutoresizingMask(
+        NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable,
+    );
+    left.addSubview(&scroll);
+    let overlay = crate::canvas::Canvas::new(mtm, left.bounds());
+    overlay.setAutoresizingMask(
+        NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable,
+    );
+    left.addSubview(&overlay);
+    overlay.on_resize(|| util::later(0.0, update_overlay));
+    split.addSubview(&left);
 
     let pane = detail::Pane::new(mtm, rect(0.0, 0.0, 500.0, 600.0));
     split.addSubview(&pane.root);
     split.adjustSubviews();
     if let Some(left) = split.subviews().firstObject() {
+        // The table starts at its ideal width.
         let h = split.bounds().size.height;
         left.setFrame(rect(0.0, 0.0, 500.0, h));
         split.adjustSubviews();
@@ -436,6 +456,7 @@ fn build() {
             search_field,
             filter_button,
             detail: std::rc::Rc::new(pane),
+            overlay: std::rc::Rc::new(crate::canvas::Layer::new(Retained::into_super(overlay))),
             takes: Vec::new(),
             transcripts: HashMap::new(),
             rows: Vec::new(),
@@ -589,6 +610,60 @@ fn refresh_rows() {
         table.reloadData();
         apply_selection();
     }
+    update_overlay();
+}
+
+/// "Nothing matches", or no search results, over an empty table.
+fn update_overlay() {
+    let Some((layer, empty, search, filter)) = with(|s| {
+        (
+            s.overlay.clone(),
+            s.loaded && !s.takes.is_empty() && s.rows.is_empty(),
+            s.search.trim().to_string(),
+            s.filter,
+        )
+    }) else {
+        return;
+    };
+    let size = layer.root.frame().size;
+    let mut b = layer.build();
+    if empty && search.is_empty() {
+        let title = trf(
+            "Nothing matches “{filter}”",
+            &[("filter", &filter_title(filter))],
+        );
+        detail::unavailable(
+            &mut b,
+            "line.3.horizontal.decrease.circle",
+            &title,
+            None,
+            size.width,
+            size.height - 40.0,
+        );
+        let show = b.native("show-all", rect(0.0, 0.0, 10.0, 10.0), || {
+            objc2_app_kit::NSButton::new(util::mtm())
+        });
+        show.setBezelStyle(objc2_app_kit::NSBezelStyle::Push);
+        show.setTitle(&ns(&tr("Show All")));
+        show.sizeToFit();
+        let w = show.frame().size.width;
+        show.setFrameOrigin(objc2_foundation::NSPoint::new(
+            (size.width - w) / 2.0,
+            size.height / 2.0 + 30.0,
+        ));
+        crate::canvas::on_action(&show, || set_filter(Filter::All));
+    } else if empty {
+        let title = trf("No Results for “{query}”", &[("query", &search)]);
+        detail::unavailable(
+            &mut b,
+            "magnifyingglass",
+            &title,
+            Some(&tr("Check the spelling or try a new search.")),
+            size.width,
+            size.height,
+        );
+    }
+    b.finish();
 }
 
 /// Puts the selection set into the table, and redraws what depends on it.
@@ -1168,6 +1243,9 @@ pub fn show_for_shots(dark: bool, select: Option<usize>) {
     window.setFrame_display(rect(40.0, 40.0, 1040.0, 720.0), false);
     window.orderBack(None);
     apply_selection();
+}
+
+pub fn draw_for_shots(path: &Path) {
     // A focused table in the key window draws its selection in the accent colour.
     if let Some(table) = with(|s| s.table.clone()) {
         let rows = table.numberOfRows();
@@ -1177,10 +1255,40 @@ pub fn show_for_shots(dark: bool, select: Option<usize>) {
             }
         }
     }
-}
-
-pub fn draw_for_shots(path: &Path) {
     if let Some(w) = with(|s| s.window.clone()) {
         crate::shots::write_window(&w, path);
+    }
+}
+
+// MARK: Scripted checks
+
+pub fn search_for_drive(text: &str) {
+    if let Some(field) = with(|s| {
+        s.search = text.to_string();
+        s.search_field.clone()
+    }) {
+        field.setStringValue(&ns(text));
+    }
+    refresh_rows();
+}
+
+/// A view of the table's overlay by key.
+pub fn overlay_view_for_drive(key: &str) -> Option<Retained<NSView>> {
+    with(|s| s.overlay.get(key)).flatten()
+}
+
+pub fn sort_for_drive(descriptors: &NSArray<NSSortDescriptor>) {
+    if let Some(table) = with(|s| s.table.clone()) {
+        table.setSortDescriptors(descriptors);
+    }
+}
+
+pub fn select_rows_for_drive(rows: &[usize]) {
+    if let Some(table) = with(|s| s.table.clone()) {
+        let set = objc2_foundation::NSMutableIndexSet::new();
+        for r in rows {
+            set.addIndex(*r);
+        }
+        table.selectRowIndexes_byExtendingSelection(&set, false);
     }
 }
