@@ -85,8 +85,11 @@ pub fn run(args: Args) {
 
 fn launched(mtm: MainThreadMarker) {
     let args = ARGS.with(|a| a.borrow_mut().take()).expect("args");
+    // An unattended update test runs as the demo, so it leaves the receiver to the copy of
+    // Lavdeck you use.
+    let demo_mode = args.demo || crate::update_ui::testing();
     install_main_menu(mtm);
-    if args.demo {
+    if demo_mode {
         // Made-up mics and takes: never the receiver, the shortcut or saved settings.
         let d = Rc::new(demo::Demo::new(!args.is_scripted()));
         let mut state = AppState::new(d.settings());
@@ -116,10 +119,10 @@ fn launched(mtm: MainThreadMarker) {
     if let Some(dir) = args.snapshot {
         // With the real receiver: only the link, which reads the receiver's status. No hot key,
         // no button monitor, no menu bar icon; nothing a stray click or key could start.
-        if !args.demo {
+        if !demo_mode {
             crate::live::start_link_only();
         }
-        snapshot::run(dir, args.demo);
+        snapshot::run(dir, demo_mode);
         return;
     }
     if let Some(dir) = args.windows {
@@ -132,9 +135,10 @@ fn launched(mtm: MainThreadMarker) {
         return;
     }
     store::backend().start();
-    if !args.demo && !hotkey::register() {
+    if !demo_mode && !hotkey::register() {
         util::log("⌥⌘R is taken by another app");
     }
+    crate::update_ui::launched(demo_mode);
 }
 
 /// A main menu nobody sees (Lavdeck has no menu bar of its own), so ⌘W, ⌘Q, ⌘, ⌘A, ⌘F and
@@ -187,6 +191,12 @@ fn install_main_menu(mtm: MainThreadMarker) {
         main.addItem(&top);
     }
     NSApplication::sharedApplication(mtm).setMainMenu(Some(&main));
+}
+
+/// Nothing would be lost by quitting now: no take starting, recording or being saved. An
+/// update waits for this before it replaces the app.
+pub fn is_idle() -> bool {
+    !store::with(|s| s.is_starting || s.is_recording || s.saving)
 }
 
 /// Quits the app the normal way (a take in progress is saved first).

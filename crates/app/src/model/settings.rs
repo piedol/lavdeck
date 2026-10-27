@@ -93,6 +93,8 @@ pub struct Settings {
     pub video: VideoSettings,
     /// `micNames`: names keyed by Bluetooth ID, so a name follows the physical mic.
     pub mic_names: BTreeMap<String, String>,
+    /// `checkUpdates`: ask GitHub once a day whether there's a newer version.
+    pub check_updates: bool,
 }
 
 impl Settings {
@@ -106,6 +108,7 @@ impl Settings {
             armed: [1, 2].into(),
             video: VideoSettings::default(),
             mic_names: BTreeMap::new(),
+            check_updates: true,
         }
     }
 }

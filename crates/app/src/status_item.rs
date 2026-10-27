@@ -1,5 +1,5 @@
 //! The menu bar icon. A click opens the deck; a right-click (or Control-click) shows quick
-//! actions: record, mono or stereo, Recordings, Settings, Quit.
+//! actions: record, mono or stereo, Recordings, Settings, Check for Updates, Quit.
 
 use std::cell::{Cell, RefCell};
 
@@ -145,6 +145,14 @@ pub fn make_menu() -> Retained<NSMenu> {
         NSEventModifierFlags::Command,
         crate::settings_window::show,
     ));
+    // Check for Updates…, Update to Lavdeck X…, or the install under way.
+    let (title, subtitle, enabled) = crate::update_ui::menu_item();
+    let update = item(&title, crate::update_ui::menu_chosen);
+    if let Some(subtitle) = subtitle {
+        update.setSubtitle(Some(&util::ns(&subtitle)));
+    }
+    update.setEnabled(enabled);
+    menu.addItem(&update);
     menu.addItem(&NSMenuItem::separatorItem(mtm));
     let quit = menu_item(
         &tr("Quit Lavdeck"),

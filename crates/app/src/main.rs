@@ -35,6 +35,10 @@ mod snapshot;
 mod status_item;
 mod store;
 mod theme;
+// Shared with piedol's other Mac apps and kept as written there (see its module docs).
+#[rustfmt::skip]
+mod update;
+mod update_ui;
 mod util;
 
 fn main() {

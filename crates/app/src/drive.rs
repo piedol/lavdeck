@@ -350,10 +350,17 @@ pub fn run(dir: PathBuf) {
                     .collect();
                 println!("menu: {}", titles.join(" | "));
                 check(
-                    "menu has Mono, Stereo, Recordings, Settings, Quit",
-                    ["Mono", "Stereo", "Recordings…", "Settings…", "Quit Lavdeck"]
-                        .iter()
-                        .all(|t| titles.iter().any(|x| x == t)),
+                    "menu has Mono, Stereo, Recordings, Settings, Check for Updates, Quit",
+                    [
+                        "Mono",
+                        "Stereo",
+                        "Recordings…",
+                        "Settings…",
+                        "Check for Updates…",
+                        "Quit Lavdeck",
+                    ]
+                    .iter()
+                    .all(|t| titles.iter().any(|x| x == t)),
                 );
                 panel::close();
                 recordings::show();

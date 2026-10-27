@@ -30,3 +30,4 @@ block2.workspace = true
 dispatch2.workspace = true
 objc2-av-kit = { version = "0.3.2", features = ["block2", "objc2-core-media", "objc2-core-foundation"] }
 objc2-core-video = "0.3.2"
+objc2-user-notifications = { version = "0.3.2", default-features = false, features = ["std", "block2", "bitflags", "UNNotification", "UNNotificationAction", "UNNotificationCategory", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSettings", "UNNotificationTrigger", "UNUserNotificationCenter"] }

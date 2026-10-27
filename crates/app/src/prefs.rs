@@ -1,11 +1,12 @@
 //! The app's settings in the user defaults, under the Swift app's keys, so existing settings
 //! and mic names carry over: `recordingsRoot`, `format`, `splitTracks`, `tapToRecord`, `armed`,
 //! `micNames` and `video.settings`, in the `io.github.piedol.lavdeck` domain (the standard one in
-//! the app bundle, the suite elsewhere, as the kit and CLI open it). The demo never reads or
-//! writes it.
+//! the app bundle, the suite elsewhere, as the kit and CLI open it). The update check adds
+//! `checkUpdates` and `lastUpdateCheck`. The demo never reads or writes it.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
@@ -39,6 +40,7 @@ pub fn load() -> Settings {
     };
     s.split_tracks = bool_or("splitTracks", true);
     s.tap_to_record = bool_or("tapToRecord", true);
+    s.check_updates = bool_or("checkUpdates", true);
     if let Some(armed) = d.arrayForKey(&ns("armed")) {
         s.armed = armed
             .iter()
@@ -71,6 +73,7 @@ pub fn save(s: &Settings) {
     set("format", &ns(s.format.key()));
     d.setBool_forKey(s.split_tracks, &ns("splitTracks"));
     d.setBool_forKey(s.tap_to_record, &ns("tapToRecord"));
+    d.setBool_forKey(s.check_updates, &ns("checkUpdates"));
     let armed: Vec<Retained<NSNumber>> = s
         .armed
         .iter()
@@ -83,4 +86,21 @@ pub fn save(s: &Settings) {
     let names = NSDictionary::from_retained_objects(&key_refs, &values);
     set("micNames", &names);
     crate::convert::video(&s.video).save_to(&d);
+}
+
+/// When the last update check got an answer from GitHub (`lastUpdateCheck`, seconds since
+/// 1970), or `None` before the first.
+pub fn last_update_check() -> Option<SystemTime> {
+    let secs = defaults().doubleForKey(&ns("lastUpdateCheck"));
+    Duration::try_from_secs_f64(secs)
+        .ok()
+        .filter(|d| !d.is_zero())
+        .and_then(|d| UNIX_EPOCH.checked_add(d))
+}
+
+pub fn set_last_update_check(when: SystemTime) {
+    let secs = when
+        .duration_since(UNIX_EPOCH)
+        .map_or(0.0, |d| d.as_secs_f64());
+    defaults().setDouble_forKey(secs, &ns("lastUpdateCheck"));
 }

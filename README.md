@@ -21,7 +21,7 @@ Lavdeck controls a DJI Mic Series Mobile RX from your Mac's menu bar. Plug the r
 
 Lavdeck can record your screen and camera with the mics, keeps every take in a searchable Recordings window, and runs plugins for jobs such as transcription. It talks to the receiver directly over USB and sends it only four commands, each checked on the hardware: get version, get capabilities, set channel mode and set gain.
 
-The program file is 2.5 MB, and Lavdeck uses about 12 MB of memory with the receiver connected.
+The program file is 2.6 MB, and Lavdeck uses about 12 MB of memory with the receiver connected.
 
 Lavdeck is in English, Simplified Chinese, Japanese, German, French, Spanish, Brazilian Portuguese and Korean, and follows your system language. You can set Lavdeck's language in System Settings › General › Language & Region › Applications.
 
@@ -34,7 +34,7 @@ Lavdeck is an independent project. It isn't made by DJI or affiliated with DJI.
 - [The deck](#the-deck) · [Which mic is which?](#which-mic-is-which) · [Recording](#recording) · [Screen and camera](#screen-and-camera)
 - [Recordings](#recordings) · [The menu bar icon](#the-menu-bar-icon) · [Settings](#settings)
 - [Requirements](#requirements)
-- [Install](#install) · [Uninstall](#uninstall)
+- [Install](#install) · [Updates](#updates) · [Uninstall](#uninstall)
 - [Privacy and permissions](#privacy-and-permissions)
 - [Plugins](#plugins)
 - [Troubleshooting](#troubleshooting)
@@ -58,7 +58,7 @@ On each strip, from the top:
 
 On the right are the gain fader (−12, −6, 0, +6 and +12 dB), **MONO** and **STEREO** (stereo puts TX1 on the left channel and TX2 on the right), **SCREEN** and **CAMERA**, and **Record**. The footer shows the receiver's noise cancelling, which you set with the O, L and H switch on the receiver, and the recording format. Click the format to open Recordings, or the gear for Settings.
 
-Right-click the menu bar icon for a menu with recording, mono or stereo, Recordings, Settings and **Quit Lavdeck**.
+Right-click the menu bar icon for a menu with recording, mono or stereo, Recordings, Settings, **Check for Updates…** and **Quit Lavdeck**.
 
 <br clear="right">
 
@@ -133,7 +133,7 @@ From left to right: both mics linked; recording; a mic has dropped; low battery;
 
 | Tab | Holds |
 |---|---|
-| General | The recordings folder, WAV or M4A, separate TX1 and TX2 files in stereo, the transmitter buttons, and **Open at login** |
+| General | The recordings folder, WAV or M4A, separate TX1 and TX2 files in stereo, the transmitter buttons, **Open at login** and **Check for updates automatically** |
 | Video | Screen and camera recording, the camera preview, system audio, frame rate, video format, and the finished video's camera bubble |
 | Plugins | Installed plugins, switching each on or off, their settings, and the permissions they use |
 
@@ -179,18 +179,26 @@ ditto build/Lavdeck.app /Applications/Lavdeck.app && open /Applications/Lavdeck.
 3. It asks for the camera, and for Screen & System Audio Recording, when you first switch on **CAMERA** or **SCREEN**. macOS applies a new screen recording permission only after Lavdeck reopens, so quit and reopen it after you allow it.
 4. To start Lavdeck when you log in, turn on **Open at login** in **Settings › General**.
 
+### Updates
+
+Right-click the menu bar icon and choose **Check for Updates…** to look for a new version. Lavdeck also checks about a minute after launch if the last check was more than a day ago, then daily while it runs. To stop these checks, turn off **Check for updates automatically** in Settings › General.
+
+When a new version is out, a notification says so and the menu shows **Update to Lavdeck X.Y.Z…**. The first time this happens, macOS asks whether Lavdeck may show notifications. Choose the menu item or click the notification to read the release notes, then click **Install and Relaunch**.
+
+Lavdeck downloads the release from GitHub and installs it only if the download matches the checksum GitHub lists for it and the app inside is signed by Lavdeck's developer and notarized by Apple. The old copy goes to the Trash and the new version opens in its place. During a take, the install waits until you stop recording and the take is saved. If your account can't make changes in the folder Lavdeck is in, Lavdeck opens the release page in your browser instead.
+
 ### Uninstall
 
 1. Turn off **Open at login** in Settings › General, then right-click the menu bar icon and choose **Quit Lavdeck**.
 2. Move `/Applications/Lavdeck.app` to the Trash.
 3. Run `defaults delete io.github.piedol.lavdeck` to remove its settings and mic names.
-4. Move `~/Library/Logs/Lavdeck` and `~/Library/Application Support/Lavdeck` (installed plugins) to the Trash.
+4. Move `~/Library/Logs/Lavdeck`, `~/Library/Caches/Lavdeck` (left by an update) and `~/Library/Application Support/Lavdeck` (installed plugins) to the Trash.
 5. Your recordings stay in `~/Recordings/Lavdeck`, or the folder you chose, until you remove them.
 6. Remove Lavdeck from System Settings › Privacy & Security › Microphone, Camera, and Screen & System Audio Recording.
 
 ## Privacy and permissions
 
-- Lavdeck makes no network connections and has no analytics or update check. Plugins are separate programs, so check what a plugin does before you install it.
+- Lavdeck checks GitHub once a day for a new version. You can turn this off in Settings › General. Lavdeck has no analytics. Plugins are separate programs, so check what a plugin does before you install it.
 - The microphone is on only between Record and Stop, and Lavdeck records only the receiver.
 - The screen and camera are recorded only during a take, and only when SCREEN or CAMERA is on. The camera preview shows only while recording.
 - Lavdeck registers **⌥⌘R** as a system-wide hot key, which doesn't need Accessibility access.
@@ -203,6 +211,7 @@ What Lavdeck keeps on your Mac:
 | Settings, including mic names stored by Bluetooth ID | `~/Library/Preferences/io.github.piedol.lavdeck.plist` |
 | A line each time a transmitter's charging state or battery code changes, with the mic's name | `~/Library/Logs/Lavdeck/battery.log` |
 | Installed plugins | `~/Library/Application Support/Lavdeck/Plugins` |
+| An update while it downloads and is checked | `~/Library/Caches/Lavdeck/Updates` |
 
 When TX1 or TX2 is armed alone, the take is recorded to a temporary file first, which Lavdeck deletes after that mic's channel is saved.
 
@@ -238,6 +247,7 @@ Install a plugin with **Settings › Plugins › Install Plugin…**, or with `l
 | A mic's link button changes the Mac's volume | Turn on **Tap a mic's link button to start or stop recording** in Settings › General. |
 | A strip shows "Level 3" or similar instead of a battery level | The receiver reported a battery code Lavdeck hasn't mapped yet. It's logged in `~/Library/Logs/Lavdeck/battery.log`; a report that includes the battery level DJI's app showed at the time helps map it. |
 | A take has no transcript | Lavdeck transcribes through plugins. Install a transcription plugin and switch it on in Settings › Plugins. |
+| An update opens the release page instead of installing | Your account can't make changes in the folder Lavdeck is in. Download the zip from that page and drag **Lavdeck** into Applications. |
 
 ## Development
 
@@ -245,7 +255,7 @@ Install a plugin with **Settings › Plugins › Install Plugin…**, or with `l
 |---|---|
 | `crates/kit` | The USB link, DUML framing, the status decoder, the allowlisted commands, the recorder, the take library, the plugin protocol and the plugin and capture runners. Its tests run the decoder and framing on frames captured from the receiver |
 | `crates/capture` | Screen and camera recording, the camera preview and each take's finished video |
-| `crates/app` | The AppKit menu bar app: the deck, Recordings, Settings, permissions and the demo and snapshot modes |
+| `crates/app` | The AppKit menu bar app: the deck, Recordings, Settings, permissions, updates, and the demo and snapshot modes |
 | `crates/cli` | The `lavdeck` command-line tool, for scripting and debugging |
 | `locales` | The translations, keyed by the English text |
 | `sdk/swift` | `LavdeckPluginKit` and the take library reader, for plugins written in Swift (`Package.swift` builds only these) |
@@ -258,10 +268,13 @@ scripts/bundle.sh                                    # build and sign build/Lavd
 scripts/bundle.sh --notarize                         # also notarize it and zip dist/Lavdeck-macOS-arm64.zip
 build/Lavdeck.app/Contents/MacOS/Lavdeck --demo      # run with made-up mics, no receiver needed
 build/Lavdeck.app/Contents/MacOS/Lavdeck --demo --snapshot /tmp/deck   # draw the deck and menu bar icons to PNG
+LAVDECK_UPDATE_TEST=install build/Lavdeck.app/Contents/MacOS/Lavdeck   # check now and install a newer release without asking
 swift scripts/make-showcase.swift                    # redraw docs/images/showcase.png and social-preview.png
 ```
 
 Add `-AppleLanguages '(de)'` to run or draw it in another language.
+
+`LAVDECK_UPDATE_TEST=install` runs with the demo's mics, so it never opens the receiver or touches your settings. `LAVDECK_UPDATE_FEED=<url>` reads the release from that URL in place of GitHub, and a `file://` feed may point at a local zip.
 
 `--notarize` needs a Developer ID Application certificate and a notarytool keychain profile, named by `NOTARY_PROFILE` (default `piedol-notary`).
 

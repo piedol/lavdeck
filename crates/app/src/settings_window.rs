@@ -685,6 +685,21 @@ fn general(f: &mut Form) {
         store::set_launch_at_login,
     );
     f.end(None);
+
+    f.section(Some(&tr("Updates")));
+    f.toggle(
+        "updates",
+        &tr("Check for updates automatically"),
+        s.settings.check_updates,
+        true,
+        |on| {
+            store::set_settings(|s| s.check_updates = on);
+            crate::update_ui::setting_changed();
+        },
+    );
+    f.end(Some(&tr(
+        "Once a day, Lavdeck asks GitHub whether there’s a newer version.",
+    )));
 }
 
 fn choose_folder() {
