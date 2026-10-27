@@ -9,3 +9,6 @@ DerivedData/
 
 # Local code-signing choice (see README)
 .signing-identity
+
+# Rust build output
+/target/

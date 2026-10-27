@@ -1,0 +1,13 @@
+[package]
+name = "lavdeck-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "lavdeck"
+path = "src/main.rs"
+
+[dependencies]
