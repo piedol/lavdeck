@@ -59,7 +59,10 @@ pub fn duration(path: &Path) -> Option<f64> {
 /// Writes one channel (0 = left/TX1, 1 = right/TX2) of a stereo file as a mono file.
 pub fn extract(source: &Path, channel: usize, destination: &Path) -> Result<(), SplitError> {
     let folder = destination.parent().unwrap_or(Path::new("."));
-    let scratch = folder.join(format!(".{}.wav", NSUUID::new().UUIDString()));
+    // The unused half is written in the source's format, so it needs the source's extension:
+    // AAC settings on a `.wav` file fail, which broke recording one mic alone in M4A.
+    let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("wav");
+    let scratch = folder.join(format!(".{}.{ext}", NSUUID::new().UUIDString()));
     let result = if channel == 0 {
         split(source, destination, &scratch)
     } else {
@@ -194,6 +197,30 @@ pub(crate) mod tests {
             .map(|c| i32::from_le_bytes([0, c[0], c[1], c[2]]) >> 8)
             .collect();
         (channels, bits, values)
+    }
+
+    #[test]
+    fn keeps_one_mic_of_an_m4a_take() {
+        let folder = scratch_folder();
+        let wav = folder.join("source.wav");
+        write_wav(&wav, 2, 48_000);
+        let source = folder.join("12.00.00 Stereo.m4a");
+        let made = std::process::Command::new("afconvert")
+            .args(["-f", "m4af", "-d", "aac", "-b", "256000"])
+            .arg(&wav)
+            .arg(&source)
+            .status()
+            .unwrap();
+        assert!(made.success());
+        let solo = folder.join("12.00.00 TX1.m4a");
+        extract(&source, 0, &solo).unwrap();
+        assert!(duration(&solo).unwrap() > 0.9);
+        let leftovers = std::fs::read_dir(&folder)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with('.'))
+            .count();
+        assert_eq!(leftovers, 0);
     }
 
     #[test]
