@@ -61,13 +61,13 @@ func draw(_ px: CGFloat) -> NSBitmapImageRep {
 
 let set = URL(fileURLWithPath: "assets/AppIcon.iconset")
 try? FileManager.default.removeItem(at: set)
-try! FileManager.default.createDirectory(at: set, withIntermediateDirectories: true)
+try! FileManager.default.createDirectory(at: set, withIntermediateDirectories: true)  // makes assets/ too
 for (pt, scale) in [(16, 1), (16, 2), (32, 1), (32, 2), (128, 1), (128, 2), (256, 1), (256, 2), (512, 1), (512, 2)] {
     let name = scale == 1 ? "icon_\(pt)x\(pt).png" : "icon_\(pt)x\(pt)@2x.png"
     let data = draw(CGFloat(pt * scale)).representation(using: .png, properties: [:])!
     try! data.write(to: set.appendingPathComponent(name))
 }
-try! draw(512).representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "assets/logo.png"))
+try! draw(1024).representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "assets/logo.png"))
 let p = Process(); p.launchPath = "/usr/bin/iconutil"; p.arguments = ["-c", "icns", set.path, "-o", "assets/AppIcon.icns"]
 p.launch(); p.waitUntilExit()
 // The iconset is an intermediate build product of this script.
