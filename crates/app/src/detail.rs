@@ -1079,10 +1079,11 @@ pub fn file_label(file: &TakeFile) -> String {
             Some("screen") => tr("Screen recording (raw)"),
             Some("camera") => tr("Camera recording (raw)"),
             Some("system-audio") => tr("System audio"),
-            _ => trf(
-                "Captured {kind}",
-                &[("kind", file.kind.as_deref().unwrap_or("media"))],
-            ),
+            _ => match file.kind.as_deref() {
+                Some("video") => tr("Captured video"),
+                Some("audio") => tr("Captured audio"),
+                _ => tr("Captured media"),
+            },
         },
     }
 }
@@ -1795,10 +1796,14 @@ fn several_body(
     {
         let u = untranscribed.clone();
         rows.push((
-            trf(
-                "Transcribe the {n} without a transcript",
-                &[("n", &u.len().to_string())],
-            ),
+            if u.len() == 1 {
+                tr("Transcribe the 1 without a transcript")
+            } else {
+                trf(
+                    "Transcribe the {n} without a transcript",
+                    &[("n", &u.len().to_string())],
+                )
+            },
             None,
             "text.quote",
             false,

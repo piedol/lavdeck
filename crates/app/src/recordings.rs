@@ -309,7 +309,10 @@ fn build() {
     window.setContentMinSize(objc2_foundation::NSSize::new(940.0, 580.0));
     window.setToolbarStyle(NSWindowToolbarStyle::Unified);
     window.center();
-    window.setFrameAutosaveName(&ns("recordings"));
+    // The demo keeps out of the real app's defaults, window frames included.
+    if !store::with(|s| s.demo) {
+        window.setFrameAutosaveName(&ns("recordings"));
+    }
     window.setDelegate(Some(ProtocolObject::from_ref(&*controller)));
 
     // Toolbar items, made now so their controls can be kept.
@@ -1079,23 +1082,25 @@ pub fn ask_to_delete(takes: Option<Vec<Take>>) {
         tr("Move this recording to the Trash?")
     }));
     let busy = store::with(|m| doomed.iter().any(|t| m.plugins.job(&t.id, None).is_some()));
-    let mut message = if n > 1 {
-        trf(
-            "All files of these {n} takes, including transcripts and videos, go to the Trash.",
-            &[("n", &format::count(n as u64))],
-        )
-    } else {
-        trf(
-            "All files of the {stem} take, including transcripts and videos, go to the Trash.",
+    let count = format::count(n as u64);
+    let message = match (n > 1, busy) {
+        (true, false) => trf(
+            "All files of these {n} takes, including transcripts and videos, go to the Trash. You can restore them from there.",
+            &[("n", &count)],
+        ),
+        (true, true) => trf(
+            "All files of these {n} takes, including transcripts and videos, go to the Trash. Work still running on them is cancelled. You can restore them from there.",
+            &[("n", &count)],
+        ),
+        (false, false) => trf(
+            "All files of the {stem} take, including transcripts and videos, go to the Trash. You can restore them from there.",
             &[("stem", &doomed[0].stem)],
-        )
+        ),
+        (false, true) => trf(
+            "All files of the {stem} take, including transcripts and videos, go to the Trash. Work still running on them is cancelled. You can restore them from there.",
+            &[("stem", &doomed[0].stem)],
+        ),
     };
-    if busy {
-        message.push(' ');
-        message.push_str(&tr("Work still running on them is cancelled."));
-    }
-    message.push(' ');
-    message.push_str(&tr("You can restore them from there."));
     alert.setInformativeText(&ns(&message));
     let files: usize = doomed.iter().map(|t| t.files.len()).sum();
     let confirm = alert.addButtonWithTitle(&ns(&trn(

@@ -8,8 +8,8 @@ use objc2_app_kit::{
     NSAttributedStringNSExtendedStringDrawing, NSAttributedStringNSStringDrawing,
     NSBackgroundColorAttributeName, NSBezierPath, NSColor, NSFont, NSFontAttributeName,
     NSForegroundColorAttributeName, NSGraphicsContext, NSImage, NSImageSymbolConfiguration,
-    NSKernAttributeName, NSLineBreakMode, NSMutableParagraphStyle, NSParagraphStyleAttributeName,
-    NSStrikethroughStyleAttributeName, NSStringDrawingOptions,
+    NSKernAttributeName, NSLineBreakMode, NSLineBreakStrategy, NSMutableParagraphStyle,
+    NSParagraphStyleAttributeName, NSStrikethroughStyleAttributeName, NSStringDrawingOptions,
 };
 use objc2_core_graphics::CGContext;
 use objc2_foundation::{
@@ -159,6 +159,8 @@ impl Text {
     pub fn attributed(&self) -> Retained<NSAttributedString> {
         let style = NSMutableParagraphStyle::new();
         style.setLineBreakMode(self.line_break);
+        // Korean wraps between words, as AppKit's own labels do; other scripts are unaffected.
+        style.setLineBreakStrategy(NSLineBreakStrategy::HangulWordPriority);
         style.setAlignment(self.align);
         let kern = NSNumber::new_f64(self.kern);
         let strike = NSNumber::new_isize(if self.strike { 1 } else { 0 });

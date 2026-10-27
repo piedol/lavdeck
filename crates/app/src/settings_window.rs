@@ -381,6 +381,9 @@ impl<'a> Form<'a> {
                     // Each line ends at the right edge.
                     let style = objc2_app_kit::NSMutableParagraphStyle::new();
                     style.setAlignment(objc2_app_kit::NSTextAlignment::Right);
+                    style.setLineBreakStrategy(
+                        objc2_app_kit::NSLineBreakStrategy::HangulWordPriority,
+                    );
                     let a = t.attributed();
                     let m = objc2_foundation::NSMutableAttributedString::initWithAttributedString(
                         objc2_foundation::NSMutableAttributedString::alloc(),

@@ -219,7 +219,7 @@ fn header(b: &mut Build, s: &AppState, y: f64) -> f64 {
         let on: Vec<String> = s
             .starting_sources()
             .iter()
-            .map(|src| source_title(src).to_lowercase())
+            .map(|src| source_noun(src))
             .collect();
         let label = if on.is_empty() {
             tr("Starting…")
@@ -307,8 +307,59 @@ fn join_and(items: &[String]) -> String {
         [one] => one.clone(),
         [rest @ .., last] => trf(
             "{list} and {last}",
-            &[("list", &rest.join(", ")), ("last", last)],
+            &[("list", &rest.join(&tr(", "))), ("last", last)],
         ),
+    }
+}
+
+/// A capture source's name inside a sentence: lower-case in English, as the language
+/// writes it elsewhere. A plugin's own source keeps its name.
+fn source_noun(source: &str) -> String {
+    match source {
+        "screen" => tr("screen"),
+        "camera" => tr("camera"),
+        "system-audio" => tr("system audio"),
+        other => other.to_lowercase(),
+    }
+}
+
+/// A capture button's label: "SCREEN", "CAMERA", "SYSTEM AUDIO", or a plugin's own.
+fn source_button(source: &str) -> String {
+    match source {
+        "screen" => tr("SCREEN"),
+        "camera" => tr("CAMERA"),
+        "system-audio" => tr("SYSTEM AUDIO"),
+        other => source_title(other).to_uppercase(),
+    }
+}
+
+/// A capture button's tooltip, with the source on or off.
+fn capture_tip(source: &str, on: bool) -> String {
+    match (source, on) {
+        ("screen", true) => tr("Screen records with each take. Click to turn it off."),
+        ("camera", true) => tr("Camera records with each take. Click to turn it off."),
+        ("system-audio", true) => tr("System audio records with each take. Click to turn it off."),
+        ("screen", false) => tr("Click to record the screen with each take."),
+        ("camera", false) => tr("Click to record the camera with each take."),
+        ("system-audio", false) => tr("Click to record the system audio with each take."),
+        (other, true) => trf(
+            "{source} records with each take. Click to turn it off.",
+            &[("source", &source_title(other))],
+        ),
+        (other, false) => trf(
+            "Click to record the {source} with each take.",
+            &[("source", &source_noun(other))],
+        ),
+    }
+}
+
+/// A capture button's accessibility label.
+fn capture_a11y(source: &str) -> String {
+    match source {
+        "screen" => tr("Record screen"),
+        "camera" => tr("Record camera"),
+        "system-audio" => tr("Record system audio"),
+        other => trf("Record {source}", &[("source", &source_noun(other))]),
     }
 }
 
@@ -405,11 +456,12 @@ fn strip(b: &mut Build, s: &AppState, index: u8, x: f64, y: f64) -> f64 {
         let dest = s.destination(index);
         let plate = match &dest {
             Some(file) => {
-                let side = if index == 1 { "L" } else { "R" };
-                let title = if s.recording_mode == Some(ChannelMode::Stereo) {
-                    trf("{name} · {side}", &[("name", &name), ("side", side)])
-                } else {
+                let title = if s.recording_mode != Some(ChannelMode::Stereo) {
                     name.clone()
+                } else if index == 1 {
+                    trf("{name} · L", &[("name", &name)])
+                } else {
+                    trf("{name} · R", &[("name", &name)])
                 };
                 Plate {
                     title,
@@ -1081,13 +1133,13 @@ fn master(b: &mut Build, s: &AppState, x: f64, y: f64) -> f64 {
     let disabled = s.is_recording || s.pending_channel.is_some();
     let sw_h = th(11.0) + 12.0;
     let half = iw / 2.0;
-    for (i, (label, target)) in [
+    let modes = [
         (tr("MONO"), ChannelMode::Mono),
         (tr("STEREO"), ChannelMode::Stereo),
-    ]
-    .into_iter()
-    .enumerate()
-    {
+    ];
+    let labels: Vec<String> = modes.iter().map(|(l, _)| l.clone()).collect();
+    let fit = CapsFit::find(&labels, 11.0, 0.7, half, CAPS_PAD).unwrap_or(CapsFit::SMALLEST);
+    for (i, (label, target)) in modes.into_iter().enumerate() {
         let on = mode == Some(target);
         let c = b.canvas(
             &format!("mode-{i}"),
@@ -1104,13 +1156,8 @@ fn master(b: &mut Build, s: &AppState, x: f64, y: f64) -> f64 {
                 };
                 let fill = if on { theme::ink() } else { theme::well() };
                 draw::fill_round(whole, 7.0, &fill);
-                let t = Text::new(
-                    label.clone(),
-                    theme::caps(),
-                    if on { theme::on_ink() } else { theme::mute() },
-                )
-                .kern(0.7);
-                t.draw_at(((r.size.width - t.width()) / 2.0).px(), 6.0);
+                let t = fit.text(&label, if on { theme::on_ink() } else { theme::mute() });
+                t.draw_at(((r.size.width - t.width()) / 2.0).px(), fit.top(11.0, 6.0));
             });
         });
         if !disabled {
@@ -1157,14 +1204,14 @@ fn master(b: &mut Build, s: &AppState, x: f64, y: f64) -> f64 {
     let cw = (iw - 6.0 * (n - 1.0)) / n;
     let ch = th(10.0) + 12.0;
     let locked = s.is_recording;
+    let layout = CaptureLayout::find(&items, cw);
     let mut keys = Vec::new();
     for (i, item) in items.into_iter().enumerate() {
         let key = format!("capture-{}", item.id);
         keys.push(key.clone());
         let c = b.canvas(&key, rect(ix + i as f64 * (cw + 6.0), cy, cw, ch));
-        let title = source_title(&item.source);
         let it = item.clone();
-        c.on_draw(move |r| draw_capture(r, &it, locked));
+        c.on_draw(move |r| draw_capture(r, &it, locked, layout));
         if !locked {
             let it = item.clone();
             c.on_click(move || match &it.toggle {
@@ -1174,19 +1221,11 @@ fn master(b: &mut Build, s: &AppState, x: f64, y: f64) -> f64 {
         }
         c.tip(&if locked {
             tr("Stop recording to change what’s captured")
-        } else if item.on {
-            trf(
-                "{source} records with each take. Click to turn it off.",
-                &[("source", &title)],
-            )
         } else {
-            trf(
-                "Click to record the {source} with each take.",
-                &[("source", &title.to_lowercase())],
-            )
+            capture_tip(&item.source, item.on)
         })
         .a11y(
-            &trf("Record {source}", &[("source", &title.to_lowercase())]),
+            &capture_a11y(&item.source),
             Some(&if item.on { tr("on") } else { tr("off") }),
         );
     }
@@ -1355,7 +1394,97 @@ fn capture_symbol(source: &str, on: bool) -> &'static str {
     }
 }
 
-fn draw_capture(r: NSRect, item: &CaptureItem, locked: bool) {
+/// Room kept on each side of a caps label in a switch or button.
+const CAPS_PAD: f64 = 4.0;
+
+/// The size and tracking of a row of caps labels. Some languages' words run longer than the
+/// design allows, so a row gives up tracking first, then size, until every label fits.
+#[derive(Clone, Copy)]
+struct CapsFit {
+    size: f64,
+    kern: f64,
+}
+
+impl CapsFit {
+    const SMALLEST: CapsFit = CapsFit {
+        size: 8.0,
+        kern: 0.0,
+    };
+
+    /// The first of the designed size and tracking, half the tracking, none, then half a
+    /// point smaller at a time down to 8 pt, at which every label fits `width` with `pad` on
+    /// each side; none when even the smallest doesn't.
+    fn find(labels: &[String], size: f64, kern: f64, width: f64, pad: f64) -> Option<CapsFit> {
+        let mut steps = vec![
+            CapsFit { size, kern },
+            CapsFit {
+                size,
+                kern: kern / 2.0,
+            },
+            CapsFit { size, kern: 0.0 },
+        ];
+        let mut smaller = size - 0.5;
+        while smaller >= 8.0 {
+            steps.push(CapsFit {
+                size: smaller,
+                kern: 0.0,
+            });
+            smaller -= 0.5;
+        }
+        steps.into_iter().find(|fit| {
+            labels
+                .iter()
+                .all(|l| fit.text(l, theme::ink()).width() + 2.0 * pad <= width)
+        })
+    }
+
+    fn text(&self, label: &str, color: Retained<NSColor>) -> Text {
+        Text::new(label, theme::font(self.size, Weight::Bold), color).kern(self.kern)
+    }
+
+    /// Where to draw the label's top so its capitals stay centred where the designed size
+    /// (`size` drawn from `top`) puts them.
+    fn top(&self, size: f64, top: f64) -> f64 {
+        let middle = |s: f64| {
+            let f = theme::font(s, Weight::Bold);
+            f.ascender() - f.capHeight() / 2.0
+        };
+        top + middle(size) - middle(self.size)
+    }
+}
+
+/// How every capture button in the row shows its source: icon and label, label alone, or
+/// icon alone, whichever fits all of them (so the row never mixes the three).
+#[derive(Clone, Copy)]
+enum CaptureLayout {
+    Both,
+    Label(CapsFit),
+    Icon,
+}
+
+impl CaptureLayout {
+    fn find(items: &[CaptureItem], width: f64) -> CaptureLayout {
+        let labels: Vec<String> = items.iter().map(|i| source_button(&i.source)).collect();
+        let designed = CapsFit {
+            size: 10.0,
+            kern: 0.3,
+        };
+        let both = items.iter().zip(&labels).all(|(item, label)| {
+            let symbol = capture_symbol(&item.source, item.on);
+            let icon = draw::symbol_size(symbol, 9.0, Weight::Bold).width;
+            icon + 3.0 + designed.text(label, theme::ink()).width() + 2.0 * CAPS_PAD <= width
+        });
+        if both {
+            return CaptureLayout::Both;
+        }
+        match CapsFit::find(&labels, 10.0, 0.3, width, CAPS_PAD) {
+            Some(fit) => CaptureLayout::Label(fit),
+            None => CaptureLayout::Icon,
+        }
+    }
+}
+
+fn draw_capture(r: NSRect, item: &CaptureItem, locked: bool, layout: CaptureLayout) {
     let red = locked && item.live;
     let filled = item.on && !locked;
     let fg = if red {
@@ -1375,25 +1504,25 @@ fn draw_capture(r: NSRect, item: &CaptureItem, locked: bool) {
         } else {
             draw::stroke_round(r, 7.0, 0.5, &theme::hairline());
         }
-        // The widest of icon and label, label alone, or icon alone that fits.
-        let t = Text::new(
-            source_title(&item.source).to_uppercase(),
-            theme::font(10.0, Weight::Bold),
-            fg.clone(),
-        )
-        .kern(0.3);
+        let label = source_button(&item.source);
         let symbol = capture_symbol(&item.source, item.on);
-        let small = draw::symbol_size(symbol, 9.0, Weight::Bold);
-        let both = small.width + 3.0 + t.width();
         let mid = r.size.height / 2.0;
-        if both <= r.size.width {
-            let x = ((r.size.width - both) / 2.0).px();
-            draw::draw_symbol(symbol, 9.0, Weight::Bold, &fg, x + small.width / 2.0, mid);
-            t.draw_at(x + small.width + 3.0, 6.0);
-        } else if t.width() <= r.size.width {
-            t.draw_at(((r.size.width - t.width()) / 2.0).px(), 6.0);
-        } else {
-            draw::draw_symbol(symbol, 12.0, Weight::Semibold, &fg, r.size.width / 2.0, mid);
+        match layout {
+            CaptureLayout::Both => {
+                let t = Text::new(label, theme::font(10.0, Weight::Bold), fg.clone()).kern(0.3);
+                let small = draw::symbol_size(symbol, 9.0, Weight::Bold);
+                let both = small.width + 3.0 + t.width();
+                let x = ((r.size.width - both) / 2.0).px();
+                draw::draw_symbol(symbol, 9.0, Weight::Bold, &fg, x + small.width / 2.0, mid);
+                t.draw_at(x + small.width + 3.0, 6.0);
+            }
+            CaptureLayout::Label(fit) => {
+                let t = fit.text(&label, fg.clone());
+                t.draw_at(((r.size.width - t.width()) / 2.0).px(), fit.top(10.0, 6.0));
+            }
+            CaptureLayout::Icon => {
+                draw::draw_symbol(symbol, 12.0, Weight::Semibold, &fg, r.size.width / 2.0, mid);
+            }
         }
     });
 }

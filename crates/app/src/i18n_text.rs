@@ -6,7 +6,7 @@
 
 /// Every language with a catalog, as macOS names its `.lproj` folders.
 #[cfg(test)]
-pub const LANGUAGES: &[&str] = &[];
+pub const LANGUAGES: &[&str] = &["zh-Hans", "ja", "de", "fr", "es", "pt-BR", "ko"];
 
 /// Replace each `{name}` in `text` with its value.
 pub fn fill(text: &str, args: &[(&str, &str)]) -> String {
@@ -311,7 +311,9 @@ mod tests {
     fn keys_are_translatable() {
         let mut problems = Vec::new();
         for (key, file) in source_keys() {
-            if key.trim() != key || key.is_empty() {
+            // A list separator such as ", " is a key of its own; other keys have no outer spaces.
+            let separator = key.chars().all(|c| c == ' ' || c.is_ascii_punctuation());
+            if (key.trim() != key && !separator) || key.trim().is_empty() {
                 problems.push(format!("spaces around {key:?} ({file})"));
             }
             if key.matches('{').count() != key.matches('}').count() {
