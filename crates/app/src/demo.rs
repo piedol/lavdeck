@@ -154,19 +154,11 @@ pub fn plugins() -> Vec<Plugin> {
     let transcribe = Manifest {
         id: "io.github.piedol.lavdeck.transcribe".into(),
         name: "Transcription".into(),
-        version: "0.1.0".into(),
-        summary: Some("Timestamped transcripts with Whisper large-v3-turbo, per speaker when each person has their own mic.".into()),
+        version: "0.2.0".into(),
+        summary: Some("Timestamped transcripts with Parakeet Ultra on the Neural Engine, per speaker when each person has their own mic.".into()),
         events: vec!["take.finished".into()],
         actions: vec![PluginAction { id: "transcribe".into(), title: "Generate transcript".into(), requires: vec![] }],
         settings: vec![
-            setting(
-                "language",
-                "Language",
-                SettingKind::Choice,
-                JsonValue::String("auto".into()),
-                &[("auto", "Detect automatically"), ("en", "English"), ("es", "Spanish"), ("fr", "French"), ("de", "German")],
-                None,
-            ),
             setting(
                 "bleed_db",
                 "Crosstalk threshold (dB)",
@@ -176,7 +168,6 @@ pub fn plugins() -> Vec<Plugin> {
                 Some("In two-speaker takes, a word is dropped from a mic's track when that mic is this much quieter than the other at the same moment."),
             ),
             setting("subtitles", "Also write SRT and VTT subtitles", SettingKind::Bool, JsonValue::Bool(true), &[], None),
-            setting("model", "Whisper model folder (MLX)", SettingKind::Path, JsonValue::String("~/Models/whisper-large-v3-turbo-mlx".into()), &[], None),
         ],
         produces: vec!["transcript".into()],
         kind: None,
@@ -899,7 +890,7 @@ fn write_transcript_lines(take: &Take, lines: &[(&str, &str)]) {
     let doc = serde_json::json!({
         "version": 1,
         "take": take.id,
-        "model": "whisper-large-v3-turbo",
+        "model": "parakeet-ultra (FluidAudio)",
         "language": "en",
         "created": "2026-10-26T11:20:00Z",
         "speakers": speakers,
