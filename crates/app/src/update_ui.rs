@@ -427,6 +427,15 @@ fn present(alert: Retained<NSAlert>, buttons: Vec<(Retained<NSButton>, Choice)>)
     let window = alert.window();
     window.center();
     crate::app::activate();
+    // The answer to a check arrives after the menu has closed, without fresh user input, and
+    // macOS 14's cooperative activation then refuses `activate`, leaving the window behind
+    // other apps' windows. The older call still brings it forward.
+    if !crate::drive::driving() {
+        #[allow(deprecated)]
+        NSApplication::sharedApplication(MainThreadMarker::new().expect("main thread"))
+            .activateIgnoringOtherApps(true);
+        window.orderFrontRegardless();
+    }
     window.makeKeyAndOrderFront(None);
     ALERT.with(|a| *a.borrow_mut() = Some(alert));
 }
