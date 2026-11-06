@@ -154,9 +154,9 @@ Lavdeck can't update the mics' firmware. The deck marks a mic whose firmware is 
 
 ### Download
 
-Download `Lavdeck-macOS-arm64.zip` from the [Releases page](https://github.com/piedol/lavdeck/releases). It's signed and notarized by Apple.
+Download `Lavdeck-macOS-arm64.dmg` from the [Releases page](https://github.com/piedol/lavdeck/releases). It's signed and notarized by Apple.
 
-1. Open the zip and drag **Lavdeck** into your Applications folder.
+1. Open the disk image and drag **Lavdeck** onto the Applications folder in its window.
 2. Open Lavdeck. Its icon appears in the menu bar. Lavdeck has no Dock icon.
 3. Plug in the receiver and click the icon.
 
@@ -247,7 +247,7 @@ Install a plugin with **Settings › Plugins › Install Plugin…**, or with `l
 | A mic's link button changes the Mac's volume | Turn on **Tap a mic's link button to start or stop recording** in Settings › General. |
 | A strip shows "Level 3" or similar instead of a battery level | The receiver reported a battery code Lavdeck hasn't mapped yet. It's logged in `~/Library/Logs/Lavdeck/battery.log`; a report that includes the battery level DJI's app showed at the time helps map it. |
 | A take has no transcript | Lavdeck transcribes through plugins. Install a transcription plugin and switch it on in Settings › Plugins. |
-| An update opens the release page instead of installing | Your account can't make changes in the folder Lavdeck is in. Download the zip from that page and drag **Lavdeck** into Applications. |
+| An update opens the release page instead of installing | Your account can't make changes in the folder Lavdeck is in. Download the disk image from that page and drag **Lavdeck** onto Applications. |
 
 ## Development
 
@@ -265,7 +265,7 @@ Install a plugin with **Settings › Plugins › Install Plugin…**, or with `l
 ```bash
 cargo test                                           # build everything and run the tests
 scripts/bundle.sh                                    # build and sign build/Lavdeck.app
-scripts/bundle.sh --notarize                         # also notarize it and zip dist/Lavdeck-macOS-arm64.zip
+scripts/bundle.sh --notarize                         # also notarize it, zip it and make dist/Lavdeck-macOS-arm64.dmg (needs dmgbuild)
 build/Lavdeck.app/Contents/MacOS/Lavdeck --demo      # run with made-up mics, no receiver needed
 build/Lavdeck.app/Contents/MacOS/Lavdeck --demo --snapshot /tmp/deck   # draw the deck and menu bar icons to PNG
 LAVDECK_UPDATE_TEST=install build/Lavdeck.app/Contents/MacOS/Lavdeck   # check now and install a newer release without asking

@@ -1,7 +1,8 @@
 #!/bin/zsh
 # Build Lavdeck.app for Apple silicon and sign it, and optionally notarize it for release.
 #   scripts/bundle.sh             build + sign into build/Lavdeck.app
-#   scripts/bundle.sh --notarize  also notarize and zip for release into dist/Lavdeck-macOS-arm64.zip
+#   scripts/bundle.sh --notarize  also notarize it, zip it for updates as dist/Lavdeck-macOS-arm64.zip and make
+#                                 the disk image for new installs, dist/Lavdeck-macOS-arm64.dmg
 #                                 (keychain profile $NOTARY_PROFILE, default piedol-notary)
 set -euo pipefail
 cd "${0:A:h}/.."
@@ -88,6 +89,7 @@ if (( NOTARIZE )); then
   rm -f dist/Lavdeck-notarize.zip
   ditto -c -k --keepParent "$APP" dist/Lavdeck-macOS-arm64.zip
   echo "Notarized: dist/Lavdeck-macOS-arm64.zip"
+  scripts/make-dmg.sh "$APP" dist/Lavdeck-macOS-arm64.dmg "#ff5d4d" "$IDENTITY" --notarize "$PROFILE"
 fi
 
 echo "Built $APP ($(du -sh "$APP" | cut -f1), binary $(du -h "$APP/Contents/MacOS/Lavdeck" | cut -f1), $(lipo -archs "$APP/Contents/MacOS/Lavdeck"))"
